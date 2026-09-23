@@ -1,0 +1,14 @@
+'Mosting A' nan nan 'King' 'Hume Z' 'Kepler' nan 'Schwabe F' 'Geminus C'
+ 'Copernicus' 'Pythagoras K' nan 'Eichstadt G' nan 'Nicolai A' 'Das' nan
+ 'Reimarus H' 'Sirsalis F' 'Pico B' nan 'Anaxagoras' 'Lagrange H'
+ 'Darney C' nan nan 'Innes G' 'Beaumont D' 'Lalande' 'Dionysius' 'Cauchy'
+ 'Cameron' 'Dawes' 'Fraunhofer G' nan 'Crookes' 'Cleostratus J' "O'Day M"
+ 'Alfraganus C' 'Aratus' nan nan 'Ventris M' nan 'Mohorovicic F' nan nan
+ 'Epigenes A' 'Gambart A' 'Papaleksi Q' nan nan 'Hilbert A' 'Carrel' 'Ohm'
+ nan nan 'Aitken A' 'Lagrange D' 'Proclus' nan nan 'Petavius B' 'Arnold G'
+ nan 'Democritus A' nan 'Glushko' nan 'Gauss J' 'Goddard A' nan
+ 'Mercurius H' 'Larmor Q' 'Janssen K' nan 'Aristarchus' 'Bessarion'
+ 'Dugan J' 'Jackson' nan 'Ryder' 'Avery' nan nan 'Messier A' nan nan nan
+ 'Sundman V' 'Tycho' 'Egede A' nan 'Necho' 'Thales' nan nan 'Euclides C'
+ 'Byrgius A' "Mandel'shtam F" 'Moore F' 'Rayet Y' nan nan 'Fechner T' nan
+ 'Furnerius A' nan 'Tharp' nan 'Giordano Bruno'

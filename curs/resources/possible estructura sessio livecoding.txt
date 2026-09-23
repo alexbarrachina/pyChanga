@@ -1,0 +1,35 @@
+- Fes una sequencia simple, 
+    - loop de notes, 
+    - d’una llista
+    - repeteix infinit
+
+- Afegeix una capa + de loop, 
+    - com un arpegi ascendent
+    - que sumi al pitch alguna variable
+
+- Afegeix un baix (o 2a veu, o acords)
+    - usant %
+    - block=False
+    - potser calgui ‘enumerate’
+
+- Usa slices per tocar una sub-sequencia
+    - Posa l’estructura dins una funció
+    - Crea un fork
+    - Clona la funció, tingues varios forks paral.lels
+
+- Crea una altre llista per definir la durada.
+    - Llegeix alhora el pitch i durada amb un zip
+
+- Canvia el loop general per cycles dins el for.
+    - Fes que les llistes tinguin tamanys diferents, i les lectures de notes es moguin
+
+- Desplaça els slices amb una variable a dins que mogui la finestra de l’slice
+
+- Crea una sequencia rítmica llegint d’un string
+
+- Crea variacions rítmiques amb slices de l’string. 
+    - Llença combinacions d’aq slices
+
+- Usa randoms per generar variabilitat
+
+- Usa el teclat o mouse per generar variabilitat

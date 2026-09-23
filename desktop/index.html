@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; worker-src 'self' blob:; connect-src 'self' ws://127.0.0.1:5173" />
+  <title>pyChangaIDE</title>
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">py<span>·</span></span><strong>pyChanga<span>IDE</span></strong><span class="edition">PYTHON STUDIO</span></div>
+    <div class="connection"><span id="connection-dot" class="dot"></span><span id="connection-label">Starting audio…</span><button id="restart" class="quiet" title="Restart audio and stop all playing parts">Restart audio</button></div>
+  </header>
+  <section class="toolbar" aria-label="Playback controls">
+    <button id="run" class="primary" disabled><span aria-hidden="true">▶</span> Run part <kbd id="run-key">⌘ ↵</kbd></button>
+    <button id="stop-all" class="stop" disabled><span aria-hidden="true">■</span> Stop all</button>
+    <div class="toolbar-divider"></div>
+    <label class="timing-label" for="quantization">START ON</label>
+    <select id="quantization" aria-label="Launch timing"><option value="beat">Next beat</option><option value="bar">Next bar</option><option value="immediate">Immediately</option></select>
+    <div class="transport">
+      <label class="tempo"><input id="bpm" aria-label="Tempo in beats per minute" type="number" min="20" max="400" value="60" /><span>BPM</span></label>
+      <div class="beat-lights" aria-label="Beat in bar"><i></i><i></i><i></i><i></i></div>
+      <span id="beat-position" class="beat-position">001.1</span>
+    </div>
+  </section>
+  <div id="banner" class="banner" role="alert" hidden></div>
+  <main>
+    <section class="workspace" aria-label="Python editor">
+      <div class="filebar"><div id="tabs" class="tabs" role="tablist"></div><div class="file-actions"><button id="new" title="New composition">New</button><button id="open" title="Open a Python file">Open</button><button id="save" title="Save the current file">Save</button></div></div>
+      <div class="editor-heading"><span id="section-label">YOUR COMPOSITION</span><span id="cursor-position">Ln 1, Col 1</span></div>
+      <div id="editor"></div>
+      <div class="editor-help"><span><span class="tiny-dot"></span> Select code or place your cursor in a part, then run.</span><span>Ordinary Python. One shared clock.</span></div>
+      <section class="console" aria-label="Python output">
+        <div class="console-heading"><span>OUTPUT <span id="output-count">0</span></span><button id="clear-output" class="quiet">Clear</button></div>
+        <div id="output" role="log" aria-live="polite"><div class="console-empty">Notes play through your speakers. Printed values and errors appear here.</div></div>
+      </section>
+    </section>
+    <aside aria-label="Musical parts">
+      <div class="aside-heading"><h1>Your parts</h1><span id="playing-count">0 PLAYING</span></div>
+      <p class="aside-description">Each part is an independent voice.<br />They all share the same beat.</p>
+      <div id="parts" class="parts"></div>
+      <div class="aside-bottom"><div class="section-rule"></div><h2>A little help getting started</h2><p>Use <code># %% name</code> to make a part. Keep common imports and variables in <code># %% setup</code>.</p><label for="examples">EXPLORE AN EXAMPLE</label><select id="examples"><option value="">Choose a composition…</option></select><button id="help" class="quiet">Keyboard shortcuts &amp; music basics <span>↗</span></button></div>
+    </aside>
+  </main>
+  <footer><span id="file-status">Unsaved composition</span><span id="pending-tempo"></span><span>PYTHON <span class="footer-separator">/</span> pyChanga 1.0</span></footer>
+  <dialog id="help-dialog"><button id="close-help" class="dialog-close" aria-label="Close help">×</button><span class="eyebrow">MAKE SOMETHING MUSICAL</span><h2>Small instructions.<br />Endless possibilities.</h2><dl><dt><kbd class="shortcut-run">⌘ Enter</kbd></dt><dd>Run selected code, or the current part</dd><dt><kbd class="shortcut-stop">⌘ .</kbd></dt><dd>Stop every part immediately</dd><dt><kbd class="shortcut-save">⌘ S</kbd></dt><dd>Save your composition</dd></dl><pre>piano(60, 0.7, 0.5)&#10;#     note  volume  beats&#10;&#10;piano([60, 64, 67], 0.7, 2)  # a chord&#10;wait(1)                       # a rest</pre><p>Re-running a part restarts it with fresh variables. Other parts keep playing. Use <code>while True:</code> when you want a part to repeat.</p><p>Setup runs separately for every part. Put imports, variables and function definitions there; put notes in musical parts.</p></dialog>
+  <script type="module" src="./renderer.ts"></script>
+</body>
+</html>

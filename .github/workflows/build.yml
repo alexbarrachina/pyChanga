@@ -1,0 +1,63 @@
+name: Build and verify pyChangaIDE
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      sign_release:
+        description: Sign and notarize using configured release credentials
+        type: boolean
+        default: false
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            platform: darwin
+            arch: arm64
+          - os: macos-15-intel
+            platform: darwin
+            arch: x64
+          - os: windows-latest
+            platform: win32
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    env:
+      PYCHANGA_NATIVE_DIR: ${{ github.workspace }}/runtime/${{ matrix.platform }}-${{ matrix.arch }}/runtime/native
+      SIGN_RELEASE: ${{ inputs.sign_release && 'true' || 'false' }}
+      APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      WINDOWS_CERTIFICATE_FILE: ${{ secrets.WINDOWS_CERTIFICATE_FILE }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: npm ci
+      - if: runner.os == 'macOS'
+        run: brew install fluidsynth
+      - run: python scripts/prepare_runtime.py --target ${{ matrix.platform }}-${{ matrix.arch }}
+      - run: python -m unittest discover -s tests -v
+      - run: npm run typecheck
+      - run: npm run build
+      - run: node scripts/smoke_desktop.mjs
+      - run: python tests/soak.py --seconds 600
+      - run: npm run make
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pychangaide-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            out/release/make/**
+            test-results/**
+          if-no-files-found: warn

@@ -1,0 +1,45 @@
+{
+  "name": "pychangaide",
+  "productName": "pyChangaIDE",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A Python live coding studio for musicians",
+  "author": "pyChangaIDE",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "python3 -m unittest discover -s tests -v",
+    "test:soak": "python3 tests/soak.py --seconds 600",
+    "package": "npm run build && electron-forge package",
+    "make": "npm run build && electron-forge make",
+    "test:desktop": "node scripts/smoke_desktop.mjs"
+  },
+  "config": {
+    "forge": "./forge.config.cjs"
+  },
+  "dependencies": {
+    "monaco-editor": "0.52.2"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "7.11.2",
+    "@electron-forge/maker-squirrel": "7.11.2",
+    "@electron-forge/maker-zip": "7.11.2",
+    "@playwright/test": "1.63.0",
+    "@types/node": "22.20.4",
+    "electron": "44.4.3",
+    "esbuild": "0.28.2",
+    "node": "24.21.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.6"
+  },
+  "overrides": {
+    "tar": "^7.5.21",
+    "tmp": "^0.2.6",
+    "extract-zip": "npm:@electron-internal/extract-zip@1.0.5"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

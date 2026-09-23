@@ -1,0 +1,4 @@
+Aquest és un arxiu de text per fer proves
+Aq és la 2a línia
+Aq és la 3a línia
+Aq és la 4a línia

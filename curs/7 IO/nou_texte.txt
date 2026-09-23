@@ -1,0 +1,2 @@
+Això és un test d'escriptura 
+('LA4', 440)

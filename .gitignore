@@ -1,0 +1,19 @@
+node_modules/
+dist/
+out/
+runtime/
+.cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+.venv/
+.DS_Store
+test-results/
+
+# Historical and duplicate audio assets are not part of the release.
+Emu_Planet_Phatt_Hip_Hop.sf2
+/TimGM6mb.sf2
+
+# Empty repository created separately; the Python source is in pyChanga_package.
+/pyChanga/
