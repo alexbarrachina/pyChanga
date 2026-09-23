@@ -37,19 +37,15 @@ independent copies; there is no shared mutable namespace. Music belongs in parts
 not setup. Nothing repeats automatically: use ordinary Python loops. A finite
 part finishes after its final scheduled note, including nonblocking notes.
 
-Files are ordinary UTF-8 `.py` files. Text before the first section is setup;
+Text before the first section is setup;
 `# %% setup`, when present, must be the first section. A file without sections is
 one part. Names must be unique within a file. A selection cannot cross sections.
 Selections are dedented and retain their original line numbers for errors.
 
-The app has multiple file tabs. Closing a tab stops that document's parts. Editing
-or deleting text does not change already-playing code until it is run again.
-The Open dialog remembers the last successfully opened folder across app restarts.
-If that folder is moved or unavailable, it starts in Documents.
-Renaming a section creates a different part; the previous running name stays in
-the sidebar until stopped. Unsaved edits prompt before closing or quitting.
 
 ## Music API
+
+Notation and some examples are inpired in SCAMP https://scamp.marcevanstein.com/
 
 `piano(note, vol, dur, block=True)` plays an integer MIDI pitch from 0 to 127, or a
 list/tuple for a chord. Volume is 0–1; duration is positive beats. `block=False`
@@ -59,8 +55,7 @@ MIDI pitch zero is a real note.
 
 Available instruments: `piano`, `clarinet`, `oboe`, `violin`, `cbass`, `drums`,
 `viola`, `sax`, `bass`, `organ`, `marimba`, `bassoon`, `choir`, `cello`, `synth`,
-`vibra`, and `guitar`. Existing `set_*()` calls are harmless compatibility helpers;
-instruments initialize automatically. `set_drums3()` uses the standard kit.
+`vibra`, and `guitar`. 
 
 - `tempo(bpm)` changes the shared tempo, 20–400 BPM, without resetting beat phase.
   Changes are scheduled beyond the committed audio window. A tempo request in
@@ -72,9 +67,6 @@ instruments initialize automatically. `set_drums3()` uses the standard kit.
 - `drumSeq("k-h-s-h-", 0.25)` uses kick 36, snare 38, hi-hat 42, cymbal 49, and
   tom 45. `-` rests for the supplied duration.
 
-Named parts provide concurrency. There is no `fork()`, child clock, or
-`wait_forever()`. Shared functions belong in setup and run synchronously when
-called from a part. See [course notes](curs/README.md).
 
 ## Run from source
 
@@ -185,7 +177,3 @@ Audio-device round-trip latency and clean-machine behavior on each target OS sti
 need hardware validation; scheduling precision is not a guarantee of speaker
 latency under arbitrary system load.
 
-First-release exclusions: independent tempos, tempo curves, microtonal pitches,
-volume envelopes, MIDI/OSC, external clock synchronization, global keyboard/mouse
-input, package management, and Python debugging. Ordinary standard-library
-imports and local helper modules work.
