@@ -18,6 +18,9 @@ class FakeRuntime:
         self.calls.append(("wait", beats))
     def tempo(self, bpm):
         self.calls.append(("tempo", bpm))
+    def run(self, function, args, kwargs):
+        self.calls.append(("run", function, args, kwargs))
+        return function.__name__ + '1'
 
 
 class MusicTests(unittest.TestCase):
@@ -29,14 +32,54 @@ class MusicTests(unittest.TestCase):
     def test_chords_and_nonblocking(self):
         pyChanga.piano([60, 64, 67], 0.7, 0.5, block=False)
         self.assertEqual(self.runtime.calls, [("note", "piano", [60, 64, 67], 0.7, 0.5, False)])
+    def test_run_is_exported_and_forwards_function_and_arguments(self):
+        namespace = {}
+        exec('from pyChanga import *', namespace)
+        def melody(note, volume=0.5):
+            pass
+        self.assertEqual(namespace['run'](melody, 60, volume=.7), 'melody1')
+        self.assertEqual(self.runtime.calls, [('run', melody, (60,), {'volume': .7})])
+    def test_run_rejects_values_without_a_function_name(self):
+        for value in [None, 'melody', 42, lambda: None]:
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                pyChanga.run(value)
+        self.assertEqual(self.runtime.calls, [])
     def test_validation(self):
         for args in [(60.5, 0.5, 1), (128, 0.5, 1), (60, 2, 1), (60, 0.5, 0), (60, float('nan'), 1), ([], 0.5, 1)]:
             with self.subTest(args=args), self.assertRaises(ValueError):
                 pyChanga.piano(*args)
     def test_drum_rest_duration_and_mapping(self):
-        pyChanga.drumSeq("k-s", 0.75)
-        self.assertEqual(self.runtime.calls[1], ("wait", 0.75))
-        self.assertEqual([self.runtime.calls[i][2] for i in (0, 2)], [[36], [38]])
+        pyChanga.drumSeq("kshctom-", 0.75)
+        self.assertEqual(self.runtime.calls, [
+            ("note", "drums", [pitch], 0.7, 0.75, True)
+            for pitch in [36, 37, 48, 65, 55, 68, 50]
+        ] + [("wait", 0.75)])
+    def test_chip_rest_duration_and_mapping(self):
+        pyChanga.chipSeq("kshctom-", 0.5)
+        self.assertEqual(self.runtime.calls, [
+            ("note", "chip", [pitch], 0.7, 0.5, True)
+            for pitch in [60, 62, 63, 65, 64, 67, 66]
+        ] + [("wait", 0.5)])
+    def test_sequences_validate_before_playing(self):
+        for sequence in [pyChanga.drumSeq, pyChanga.chipSeq]:
+            for pattern, duration in [("kx", .25), (None, .25), ("k", 0), ("k", -.25), ("k", float('nan'))]:
+                with self.subTest(sequence=sequence.__name__, pattern=pattern, duration=duration):
+                    with self.assertRaises(ValueError):
+                        sequence(pattern, duration)
+                    self.assertEqual(self.runtime.calls, [])
+    def test_all_instruments_and_sequencers_are_exported(self):
+        namespace = {}
+        exec('from pyChanga import *', namespace)
+        instruments = ['piano', 'rhodes', 'epiano', 'cbass', 'drums', 'chip', 'bass', 'vibra',
+                       'marimba', 'b3', 'organ', 'sh2000', 'arp', 'ether', 'violin',
+                       'viola', 'cello', 'strings', 'oboe', 'clarinet', 'sub']
+        for name in instruments:
+            with self.subTest(instrument=name):
+                namespace[f'set_{name}']()
+                namespace[name](60, .5, .25)
+                self.assertEqual(self.runtime.calls[-1], ('note', name, [60], .5, .25, True))
+        self.assertIs(namespace['chipSeq'], api.chipSeq)
+        self.assertIs(namespace['drumSeq'], api.drumSeq)
     def test_scales(self):
         scale = pyChanga.major_scale(60)
         self.assertEqual(scale[:8], [60, 62, 64, 65, 67, 69, 71, 72])
@@ -55,7 +98,7 @@ class MusicTests(unittest.TestCase):
 
 
 class SectionTests(unittest.TestCase):
-    source = '# %% setup\nfrom pyChanga import *\nx = 60\n\n# %% melody\nwhile True:\n    piano(x, 0.7, 1)\n\n# %% bass\nbass(36, 0.8, 2)\n'
+    source = '# %% setup\nfrom pyChanga import *\nx = 60\n\n# %% melody\nwhile True:\n    piano(x, 0.7, 1)\n\n# %% bass\ncbass(36, 0.8, 2)\n'
     def test_parse(self):
         doc = parse_document(self.source)
         self.assertEqual([p.name for p in doc.parts], ["melody", "bass"])
@@ -80,6 +123,36 @@ class SectionTests(unittest.TestCase):
         with self.assertRaises(SyntaxError) as caught:
             execution('# %% a\nx =\n', 'bad.py')
         self.assertEqual(caught.exception.lineno, 2)
+    def test_all_is_a_launcher_separate_from_musical_parts(self):
+        source = self.source + '# %% all\n# Start the whole composition.\n'
+        doc = parse_document(source)
+        self.assertEqual([p.name for p in doc.parts], ['melody', 'bass'])
+        self.assertEqual([p.name for p in doc.sections], ['melody', 'bass', 'all'])
+        line = doc.launcher.marker_line
+        for selection in [
+            {'startLine': line, 'endLine': line},
+            {'startLine': line, 'endLine': line + 1, 'endColumn': 1},
+        ]:
+            _, section, _ = execution(source, 'song.py', selection)
+            self.assertEqual(section.name, 'all')
+        self.assertEqual(execution(source, 'song.py', name='all')[1].name, 'all')
+    def test_all_can_precede_setup_and_keeps_error_lines(self):
+        source = '# %% all\n# %% setup\nfrom pyChanga import *\nx =\n# %% melody\npiano(60, .5, 1)\n'
+        with self.assertRaises(SyntaxError) as caught:
+            execution(source, 'song.py', name='all')
+        self.assertEqual(caught.exception.lineno, 4)
+    def test_all_before_a_part_does_not_capture_its_marker(self):
+        source = '# %% all\n# %% melody\npass\n'
+        self.assertEqual(execution(source, 'song.py', {'startLine': 2, 'endLine': 2})[1].name, 'melody')
+    def test_all_rejects_code_duplicate_markers_and_cross_section_selection(self):
+        with self.assertRaisesRegex(ValueError, 'empty or comment-only'):
+            parse_document(self.source + '# %% all\npiano(60, .5, 1)\n')
+        with self.assertRaisesRegex(ValueError, 'duplicate'):
+            parse_document(self.source + '# %% all\n# %% all\n')
+        with self.assertRaisesRegex(ValueError, 'one musical section'):
+            execution('# %% all\n# %% melody\npass\n', 'song.py', {'startLine': 1, 'endLine': 3, 'endColumn': 5})
+        with self.assertRaisesRegex(ValueError, 'Add a musical part'):
+            parse_document('# %% all\n')
 
 
 class TransportTests(unittest.TestCase):

@@ -10,6 +10,6 @@ setup(
     install_requires=[],
     include_package_data=True,
     package_data={
-        'pyChanga': ['sounds/TimGM6mb.sf2', 'sounds/*.txt', 'sounds/*.json'],
+        'pyChanga': ['sounds/pyChanga.sf2', 'sounds/*.txt', 'sounds/*.json'],
     },
 )

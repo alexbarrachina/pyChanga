@@ -10,7 +10,7 @@ def main():
     parser.add_argument("file", nargs="?", type=Path)
     parser.add_argument("--service", action="store_true", help="Start the editor's JSON-lines service")
     parser.add_argument("--silent", action="store_true", help="Use the recording backend without opening audio")
-    parser.add_argument("--part", help="Run only this named section")
+    parser.add_argument("--part", help="Run this named section, or all for every part together")
     parser.add_argument("--quantization", choices=["immediate", "beat", "bar"], default="beat")
     args = parser.parse_args()
     if args.service:
@@ -36,12 +36,14 @@ def main():
         filename = args.file.resolve()
         source = filename.read_text(encoding="utf-8")
         document = parse_document(source)
-        if args.part and args.part not in [p.name for p in document.parts]:
+        if args.part and args.part != "all" and args.part not in [p.name for p in document.parts]:
             raise ValueError(f"No section named {args.part!r}")
         engine = Engine(RecordingBackend() if args.silent else FluidSynthBackend(), emit)
-        for part in document.parts:
-            if args.part is None or part.name == args.part:
-                engine.run({"source": source, "filename": str(filename), "name": part.name, "quantization": args.quantization})
+        request = {"source": source, "filename": str(filename), "quantization": args.quantization}
+        if args.part is None or args.part == "all":
+            engine.run_all(request)
+        else:
+            engine.run({**request, "name": args.part})
         while engine.active:
             engine.tick()
             time.sleep(0.002)

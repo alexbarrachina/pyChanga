@@ -1,11 +1,11 @@
 export interface Selection { startLine: number; startColumn: number; endLine: number; endColumn: number }
 export interface MusicError { message: string; filename?: string; line?: number; column?: number; traceback?: string }
 export interface MusicPart {
-  id: string; name: string; documentId: string; filename: string; line: number;
+  id: string; name: string; origin: 'section' | 'function'; documentId: string; filename: string; line: number;
   state: 'preparing' | 'playing' | 'finished' | 'stopped' | 'error';
   revision: string | null; pending: {revision: string; beat: number | null} | null; error: MusicError | null;
 }
-export interface Section { name: string; line: number; markerLine: number; endLine: number }
+export interface Section { name: string; line: number; markerLine: number; endLine: number; kind?: 'part' | 'all' }
 export interface EngineEvent {
   type: string; version: number; requestId?: string; message?: string; audio?: string;
   partId?: string; revision?: string; documentId?: string; filename?: string;

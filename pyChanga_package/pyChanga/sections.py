@@ -22,6 +22,12 @@ class Section:
 class Document:
     setup: str
     parts: tuple[Section, ...]
+    launcher: Section | None = None
+
+    @property
+    def sections(self) -> tuple[Section, ...]:
+        sections = self.parts + ((self.launcher,) if self.launcher else ())
+        return tuple(sorted(sections, key=lambda section: section.marker_line))
 
 
 def parse_document(source: str) -> Document:
@@ -38,6 +44,7 @@ def parse_document(source: str) -> Document:
     if not markers:
         return Document("", (Section("main", 1, 1, max(1, len(lines)), source),))
     names, parts = set(), []
+    launcher = None
     setup_lines = lines[:markers[0][0] - 1]
     for index, (line, name) in enumerate(markers):
         if not name:
@@ -48,14 +55,18 @@ def parse_document(source: str) -> Document:
         end = markers[index + 1][0] - 1 if index + 1 < len(markers) else len(lines)
         body = "".join(lines[line:end])
         if name == "setup":
-            if index != 0:
+            if parts:
                 raise ValueError("The setup section must come before musical parts")
-            setup_lines.extend(["\n", *lines[line:end]])
+            setup_lines.extend(["\n"] * (line - len(setup_lines)) + lines[line:end])
+        elif name == "all":
+            if any(text.strip() and not text.lstrip().startswith('#') for text in body.splitlines()):
+                raise ValueError("Keep # %% all empty or comment-only. Put code in setup or named musical parts.")
+            launcher = Section(name, line, line, end, body)
         else:
             parts.append(Section(name, line, line + 1, end, body))
     if not parts:
         raise ValueError("Add a musical part after setup, for example # %% melody")
-    return Document("".join(setup_lines), tuple(parts))
+    return Document("".join(setup_lines), tuple(parts), launcher)
 
 
 def execution(source: str, filename: str, selection: dict | None = None, name: str | None = None):
@@ -69,8 +80,8 @@ def execution(source: str, filename: str, selection: dict | None = None, name: s
         raise ValueError("Invalid source selection")
     selected = (start, sc) != (end, ec)
     effective_end = end - 1 if selected and ec == 1 and end > start else end
-    part = next((p for p in document.parts if p.name == name), None) if name is not None else next(
-        (p for p in document.parts if p.marker_line <= start <= max(p.end_line, p.start_line)), None)
+    part = next((p for p in document.sections if p.name == name), None) if name is not None else next(
+        (p for p in document.sections if p.marker_line <= start <= max(p.end_line, p.start_line)), None)
     if part is None:
         raise ValueError("Place the cursor in a musical part. Setup is replayed when you run a part.")
     if selected:

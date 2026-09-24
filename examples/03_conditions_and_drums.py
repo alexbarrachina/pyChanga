@@ -1,22 +1,31 @@
-# %% setup
 from pyChanga import *
 from random import randint
 
-# General MIDI drum pitches: 36 kick, 38 snare, 42 closed hi-hat, 49 crash.
+bass_notes=[42-12, 42, 53, 51, 42, 42-12, 53, 51]
 
-# %% rhythm
+
+# pyChanga drum pitches: 36 kick, 37 snare, 50 hi-hat, 55 tom, 65 cymbal.
+
 while True:
     for step in range(8):
-        drums(42, 0.35, 0.25, block=False)
+        drums(50, 0.55, 0.25, block=False)
         if step == 0 or step == 4:
             drums(36, 0.8, 0.25, block=False)
         if step == 2 or step == 6:
-            drums(38, 0.65, 0.25, block=False)
-        if randint(0, 15) == 0:
-            drums(45, 0.45, 0.25, block=False)
-        wait(0.25)
+            drums(37, 0.65, 0.25, block=False)    
 
-# %% bass
-while True:
-    for pitch in [36, 36, 43, 39]:
-        bass(pitch, 0.5, 0.5)
+        # random hit
+        if randint(0, 3) == 0:
+            x = randint(55,65)
+            drums(x, 0.45, 0.25, block=False)
+
+        # for syncopation
+        wait(0.125)       
+        bass(bass_notes[step], 1., 0.5, block=False)
+
+        # syncopated random hit
+        if randint(0, 2) == 0:
+            x = randint(55,65)
+            drums(x, 0.45, 0.25, block=False)
+        wait(0.125)
+        

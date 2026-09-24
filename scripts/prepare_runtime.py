@@ -11,7 +11,6 @@ import json
 import os
 from pathlib import Path
 import platform
-import re
 import shutil
 import subprocess
 import sys
@@ -41,31 +40,14 @@ def download(url, checksum=None):
 
 
 def soundfont():
-    directory = ROOT / 'pyChanga_package' / 'pyChanga' / 'sounds'
-    provenance = directory / 'TimGM6mb.provenance.json'
-    target = directory / 'TimGM6mb.sf2'
-    if provenance.exists():
-        metadata = json.loads(provenance.read_text())
-        if target.exists() and hashlib.sha256(target.read_bytes()).hexdigest() == metadata['soundfontSha256']:
-            return metadata
-        expected = metadata['archiveSha256']
-    else:
-        description = download(LOCK['soundfontDescription']).read_text()
-        match = re.search(r'^ ([0-9a-f]{64})\s+\d+\s+timgm6mb-soundfont_1\.3\.orig\.tar\.gz$', description, re.M)
-        if not match:
-            raise RuntimeError('Could not read the published soundfont checksum')
-        expected = match.group(1)
-    archive = download(LOCK['soundfontSource'], expected)
-    with tarfile.open(archive) as source:
-        member = next(m for m in source.getmembers() if m.name.endswith('/TimGM6mb.sf2') or m.name == 'TimGM6mb.sf2')
-        target.write_bytes(source.extractfile(member).read())
-    license_url = 'https://metadata.ftp-master.debian.org/changelogs/main/t/timgm6mb-soundfont/timgm6mb-soundfont_1.3-5_copyright'
-    (directory / 'TimGM6mb.NOTICE.txt').write_bytes(download(license_url).read_bytes())
-    (directory / 'GPL-2.0.txt').write_bytes(download('https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt').read_bytes())
-    metadata = {'source': LOCK['soundfontSource'], 'description': LOCK['soundfontDescription'], 'archiveSha256': expected,
-                'soundfontSha256': hashlib.sha256(target.read_bytes()).hexdigest(), 'license': 'GPL-2.0-only', 'copyright': '2004 Tim Brechbill; 2010 David Bolton'}
-    provenance.write_text(json.dumps(metadata, indent=2) + '\n')
-    return metadata
+    target = ROOT / 'pyChanga_package' / 'pyChanga' / 'sounds' / 'pyChanga.sf2'
+    if not target.is_file():
+        raise RuntimeError(f'Bundled soundfont not found: {target}')
+    data = target.read_bytes()
+    if data[:4] != b'RIFF' or data[8:12] != b'sfbk':
+        raise RuntimeError(f'Invalid SoundFont file: {target}')
+    return {'source': target.relative_to(ROOT).as_posix(),
+            'soundfontSha256': hashlib.sha256(data).hexdigest()}
 
 
 def mac_native(destination):
@@ -138,7 +120,10 @@ def main():
     # Retire the previous package from this generated runtime after the rename.
     if (packages / 'musica').exists():
         shutil.rmtree(packages / 'musica')
-    shutil.copytree(ROOT / 'pyChanga_package' / 'pyChanga', packages / 'pyChanga', dirs_exist_ok=True,
+    # Replace the generated package so retired soundfonts cannot linger in builds.
+    if (packages / 'pyChanga').exists():
+        shutil.rmtree(packages / 'pyChanga')
+    shutil.copytree(ROOT / 'pyChanga_package' / 'pyChanga', packages / 'pyChanga',
                     ignore=shutil.ignore_patterns('__pycache__', 'Emu_Planet_Phatt_Hip_Hop.sf2'))
     native = runtime / 'native'
     native.mkdir(exist_ok=True)

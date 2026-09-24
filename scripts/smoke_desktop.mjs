@@ -27,6 +27,17 @@ try {
   await expect(page.locator('#bpm')).toHaveValue('60');
   expect((await page.evaluate(() => window.pyChanga.command({type:'status'}))).bpm).toBe(60);
   await expect(page.locator('.part')).toHaveCount(3);
+  const findInput = page.getByRole('dialog', {name: 'Find / Replace'}).getByRole('textbox', {name: 'Find'});
+  await page.locator('#find').click();
+  await expect(findInput).toBeVisible();
+  await findInput.fill('choice(notes)');
+  await expect(page.locator('.find-widget .matchesCount')).toHaveText('1 of 1');
+  await findInput.press('Escape');
+  await expect(findInput).toBeHidden();
+  await page.locator('#bpm').focus();
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+f' : 'Control+f');
+  await expect(findInput).toBeFocused();
+  await findInput.press('Escape');
   await page.getByTitle('Run melody', {exact:true}).click();
   await expect(page.locator('.part.playing')).toHaveCount(1, {timeout: 10000});
   await page.getByTitle('Run bass', {exact:true}).click();
@@ -54,21 +65,83 @@ try {
 
   // Ordinary editor keyboard input, including a Unicode filename and line errors.
   await page.locator('#new').click();
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+f' : 'Control+f');
+  await findInput.fill('choice(notes)');
+  await expect(page.locator('.find-widget .matchesCount')).toHaveText('No results');
+  await findInput.press('Escape');
   await page.locator('.monaco-editor').click({position:{x:170,y:60}});
   await page.keyboard.press(process.platform==='darwin'?'Meta+A':'Control+A');
   await page.evaluate(source => {
     const data = new DataTransfer(); data.setData('text/plain',source);
     document.querySelector('.monaco-editor textarea').dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));
-  }, '# %% setup\nfrom pyChanga import *\n\n# %% pulse\nwhile True:\n    piano(60, 0.3, 0.25)\n\n# %% busy\nwhile True:\n    pass\n');
+  }, '# %% setup\nfrom pyChanga import *\n\n# %% pulse\nwhile True:\n    piano(60, 0.3, 0.25)\n\n# %% busy\nwhile True:\n    pass\n\n# %% all\n');
   await expect(page.getByTitle('Run pulse',{exact:true})).toBeVisible();
-  await page.getByTitle('Run pulse',{exact:true}).click();
-  await page.getByTitle('Run busy',{exact:true}).click();
+  await expect(page.getByTitle('Run all',{exact:true})).toBeVisible();
+  await page.evaluate(() => {
+    window.testScheduled = [];
+    window.pyChanga.onEvent(event => { if (event.type === 'scheduled') window.testScheduled.push(event); });
+  });
+  await page.getByTitle('Go to all',{exact:true}).click();
+  await page.keyboard.press(process.platform==='darwin'?'Meta+Enter':'Control+Enter');
   await expect(page.locator('.part.playing')).toHaveCount(2,{timeout:10000});
+  const firstGroup = await page.evaluate(() => window.testScheduled.slice());
+  expect(firstGroup).toHaveLength(2);
+  expect(firstGroup[0].beat).toBe(firstGroup[1].beat);
+  expect(firstGroup.every(event => !event.partId.endsWith('::all'))).toBe(true);
+  await page.getByTitle('Run all',{exact:true}).click();
+  await expect.poll(async () => (await page.evaluate(() => window.testScheduled)).length).toBe(4);
+  const secondGroup = await page.evaluate(() => window.testScheduled.slice(2));
+  expect(secondGroup[0].beat).toBe(secondGroup[1].beat);
+  await expect.poll(async () => {
+    const state = await page.evaluate(() => window.pyChanga.command({type:'status'}));
+    return secondGroup.every(event => state.parts.find(part => part.id === event.partId)?.revision === event.revision);
+  }).toBe(true);
   const stopStart=Date.now();
   await page.getByRole('button',{name:'Stop busy',exact:true}).click();
   await expect(page.locator('.part.playing')).toHaveCount(1);
   console.log('Busy-loop stop UI round trip:',Date.now()-stopStart,'ms');
+  await page.locator('.monaco-editor').click({position:{x:170,y:60}});
+  await page.keyboard.press(process.platform==='darwin'?'Meta+A':'Control+A');
+  await page.evaluate(source => {
+    const data = new DataTransfer(); data.setData('text/plain', source);
+    document.querySelector('.monaco-editor textarea').dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));
+  }, '# %% setup\nfrom pyChanga import *\n\n# %% renamed\nwhile True:\n    piano(60, 0.3, 0.25)\n\n# %% busy\nwhile True:\n    pass\n\n# %% all\n');
+  await expect(page.getByTitle('Run renamed',{exact:true})).toBeVisible();
+  await page.getByTitle('Run renamed',{exact:true}).click();
+  await expect(page.locator('.part.playing')).toHaveCount(2,{timeout:10000});
+  await expect(page.getByTitle('Stop pulse',{exact:true})).toBeVisible();
+  await expect(page.getByTitle('Run pulse',{exact:true})).toHaveCount(0);
   await page.locator('#stop-all').click();
+
+  // Launch two independent instances of one Python function.
+  await page.locator('.monaco-editor').click({position:{x:170,y:60}});
+  await page.keyboard.press(process.platform==='darwin'?'Meta+A':'Control+A');
+  await page.evaluate(source => {
+    window.testScheduled = [];
+    const data = new DataTransfer(); data.setData('text/plain', source);
+    document.querySelector('.monaco-editor textarea').dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));
+  }, '# %% setup\nfrom pyChanga import *\n\ndef notes(pitch):\n    while True:\n        piano(pitch, .3, .25)\n\n# %% conductor\nrun(notes, 60)\nrun(notes, 64)\n');
+  await expect(page.getByTitle('Run conductor',{exact:true})).toBeVisible();
+  await page.getByTitle('Run conductor',{exact:true}).click();
+  await expect(page.locator('.part.playing')).toHaveCount(2,{timeout:10000});
+  const codeGroup = await page.evaluate(() => window.testScheduled.filter(event => !event.partId.endsWith('::conductor')));
+  expect(codeGroup).toHaveLength(2);
+  expect(codeGroup.map(event => event.partId.split('::').pop()).sort()).toEqual(['notes1', 'notes2']);
+  await expect(page.getByTitle('Stop notes1',{exact:true})).toBeVisible();
+  await expect(page.getByTitle('Stop notes2',{exact:true})).toBeVisible();
+  await page.getByTitle('Stop notes1',{exact:true}).click();
+  await expect(page.getByTitle('Stop notes2',{exact:true})).toBeVisible();
+  await page.locator('#stop-all').click();
+
+  await page.locator('#clear-output').click();
+  const printResult = await page.evaluate(() => window.pyChanga.command({type:'run',documentId:'print-test',
+    filename:'print-test.py',source:'print("a", 7)\nprint("next")\n',quantization:'immediate'}));
+  expect(printResult.error).toBeUndefined();
+  await expect(page.locator('#output .output-line')).toHaveCount(2,{timeout:10000});
+  expect(await page.locator('#output .output-line').evaluateAll(rows => rows.map(row =>
+    [...row.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join(''))))
+    .toEqual(['a 7', 'next']);
+
   const file=path.resolve('test-results','música with spaces.py');
   const saved=await page.evaluate(async filename=>window.pyChanga.save(filename,'from pyChanga import *\npiano(60, .5, .25)\n'),file);
   expect(await fs.readFile(saved,'utf8')).toContain('piano(60');

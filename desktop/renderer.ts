@@ -1,5 +1,6 @@
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 import 'monaco-editor/esm/vs/basic-languages/python/python.contribution';
+import 'monaco-editor/esm/vs/editor/contrib/find/browser/findController';
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import type { EngineEvent, MusicPart, Section } from './types';
 import './style.css';
@@ -9,7 +10,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const mac = navigator.platform.toUpperCase().includes('MAC');
 const modifier = mac ? '⌘' : 'Ctrl';
 $('run-key').textContent = `${modifier} ↵`;
-for (const [name, key] of [['run', 'Enter'], ['stop', '.'], ['save', 'S']]) document.querySelector(`.shortcut-${name}`)!.textContent = `${modifier} ${key}`;
+for (const [name, key] of [['run', 'Enter'], ['stop', '.'], ['save', 'S'], ['find', 'F']]) document.querySelector(`.shortcut-${name}`)!.textContent = `${modifier} ${key}`;
 
 monaco.editor.defineTheme('pyChanga', {
   base: 'vs-dark', inherit: true,
@@ -35,12 +36,14 @@ const editor = monaco.editor.create($('editor'), {language: 'python', theme: 'py
   overviewRulerLanes: 0, hideCursorInOverviewRuler: true, smoothScrolling: true,
   quickSuggestions: {other: true, comments: false, strings: false}, fixedOverflowWidgets: true});
 
-const instruments = ['piano','clarinet','oboe','violin','cbass','drums','viola','sax','bass','organ','marimba','bassoon','choir','cello','synth','vibra','guitar'];
+const instruments = ['piano','rhodes','epiano','cbass','drums','chip','bass','vibra','marimba','b3','organ','sh2000','arp','ether','violin','viola','cello','strings','oboe','clarinet','sub'];
 const functions = [...instruments.map(name => ({name, signature: '(note, vol, dur, block=True)',
   insert: `${name}(\${1:60}, \${2:0.7}, \${3:0.5})`, description: 'Play a MIDI pitch or list of pitches. Volume: 0–1. Duration: beats. block=False overlaps notes.'})),
   {name:'wait',signature:'(beats)',insert:'wait(${1:1})',description:'Rest for beats. Other musical parts keep playing.'},
   {name:'tempo',signature:'(bpm)',insert:'tempo(${1:60})',description:'Change the shared tempo on the next available beat (20–400 BPM; starts at 60).'},
-  {name:'drumSeq',signature:'(seq, dur=0.25)',insert:'drumSeq("${1:k-h-s-h-}", ${2:0.25})',description:'k: kick, s: snare, h: hi-hat, c: cymbal, t: tom, -: rest.'},
+  {name:'run',signature:'(function, *args, **kwargs)',insert:'run(${1:melody})',description:'Start an independent numbered instance of a function, such as melody1. Call from a musical part.'},
+  {name:'drumSeq',signature:'(seq, dur=0.25)',insert:'drumSeq("${1:k-h-s-h-}", ${2:0.25})',description:'k: kick, s: snare, h: hi-hat, c: cymbal, t: tom, o: open hi-hat, m: muted hi-hat, -: rest.'},
+  {name:'chipSeq',signature:'(seq, dur=0.25)',insert:'chipSeq("${1:k-h-s-h-}", ${2:0.25})',description:'Chip kit: k: kick, s: snare, h: hi-hat, c: clave, t: tom, o: open hi-hat, m: muted hi-hat, -: rest.'},
   ...['major_scale','natural_minor_scale','pentatonic_scale','pentatonic_minor_scale'].map(name => ({name,signature:'(root)',insert:`${name}(\${1:60})`,description:'An octave-extending scale. Access degrees with scale[0] or a finite slice such as scale[:8].'}))];
 monaco.languages.registerCompletionItemProvider('python', {provideCompletionItems(model, position) {
   const word = model.getWordUntilPosition(position);
@@ -60,9 +63,10 @@ const documents = new Map<string, Composition>();
 let active: Composition;
 let ready = false, parts: MusicPart[] = [], outputCount = 0, parseTimer: ReturnType<typeof setTimeout>;
 let partsSignature = '', decorations: string[] = [];
+const outputLines = new Map<string, Text>();
 
 function banner(message = '') { $('banner').textContent = message; $('banner').hidden = !message; }
-function log(text: string, kind = 'info', source?: {documentId?: string; line?: number; name?: string}) {
+function log(text: string, kind = 'info', source?: {documentId?: string; line?: number; name?: string}): Text {
   if (!$('output').querySelector('.output-line')) $('output').replaceChildren();
   const entry = document.createElement('div'); entry.className = `output-line ${kind}`;
   if (source) {
@@ -71,9 +75,27 @@ function log(text: string, kind = 'info', source?: {documentId?: string; line?: 
     link.onclick = () => { const doc = documents.get(source.documentId || ''); if (doc) { activate(doc); editor.setPosition({lineNumber: source.line || 1, column: 1}); editor.revealLineInCenter(source.line || 1); editor.focus(); } };
     entry.append(link);
   }
-  entry.append(document.createTextNode(text)); $('output').append(entry);
+  const content = document.createTextNode(text); entry.append(content); $('output').append(entry);
   while ($('output').children.length > 500) $('output').firstElementChild!.remove();
   $('output-count').textContent = String(++outputCount); $('output').scrollTop = $('output').scrollHeight;
+  return content;
+}
+function logOutput(event: EngineEvent, source: {documentId?: string; line?: number; name?: string}) {
+  const key = JSON.stringify([event.partId, event.revision, event.stream]);
+  const text = event.text || '';
+  if (!text) return;
+  let current = outputLines.get(key);
+  const fragments = text.split('\n');
+  for (let index = 0; index < fragments.length; index++) {
+    const fragment = fragments[index];
+    if ((fragment || index < fragments.length - 1) && (!current || !current.parentElement?.isConnected))
+      current = log('', event.stream === 'stderr' ? 'error' : 'info', source);
+    if (fragment) current!.appendData(fragment);
+    if (index < fragments.length - 1) current = undefined;
+  }
+  if (current) outputLines.set(key, current);
+  else outputLines.delete(key);
+  $('output').scrollTop = $('output').scrollHeight;
 }
 async function command(value: Record<string, unknown>) {
   if (!window.pyChanga) throw new Error('Open this editor through the pyChangaIDE desktop app.');
@@ -158,11 +180,27 @@ function renderParts() {
   $('playing-count').textContent = `${parts.filter(p => p.revision).length} PLAYING`;
   if (signature === partsSignature) return;
   partsSignature = signature; $('parts').replaceChildren();
-  const sections = [...active.sections];
-  for (const p of docParts) if (!sections.some(s => s.name === p.name) && (p.revision || p.pending)) sections.push({name:p.name,line:p.line,markerLine:p.line,endLine:p.line});
+  const sections: (Section & {partId?: string})[] = [...active.sections];
+  for (const p of docParts) if ((p.revision || p.pending) && (p.origin === 'function' || !active.sections.some(s => s.name === p.name)))
+    sections.push({name:p.name,line:p.line,markerLine:p.line,endLine:p.line,partId:p.id});
   if (!sections.length) { const empty = document.createElement('p'); empty.className='empty-parts'; empty.textContent = ready ? 'Add a named section to create your first musical part.' : 'Your parts will appear when the playback service is ready.'; $('parts').append(empty); }
   sections.forEach((section, index) => {
-    const part = docParts.find(p => p.name === section.name);
+    if (section.kind === 'all') {
+      const card = document.createElement('div'); card.className = 'part all-launcher';
+      const title = document.createElement('div'); title.className = 'part-title';
+      const go = document.createElement('button'); go.textContent = 'all'; go.title = 'Go to all';
+      go.onclick = () => {editor.setPosition({lineNumber:section.markerLine,column:1});editor.revealLineInCenter(section.markerLine);editor.focus();};
+      title.append(go);
+      const meta = document.createElement('div'); meta.className = 'part-meta';
+      const state = document.createElement('span'); state.className = 'part-state'; state.textContent = 'Start every part together';
+      const controls = document.createElement('div'); controls.className = 'part-buttons';
+      const play = document.createElement('button'); play.textContent = '▶ Run all'; play.title = 'Run all'; play.disabled = !ready;
+      play.onclick = () => void run('all'); controls.append(play);
+      meta.append(state, controls); card.append(title, meta); $('parts').append(card);
+      return;
+    }
+    const inSource = !section.partId;
+    const part = docParts.find(p => section.partId ? p.id === section.partId : p.name === section.name && p.origin === 'section');
     const playing = Boolean(part?.revision), pending = part?.pending;
     const card = document.createElement('div'); card.className = `part${playing ? ' playing' : ''}${pending ? ' pending' : ''}${part?.error ? ' error' : ''}`;
     const title = document.createElement('div'); title.className='part-title';
@@ -172,13 +210,13 @@ function renderParts() {
     const light=document.createElement('span');light.className='part-light';title.append(number,go,light);
     const meta=document.createElement('div');meta.className='part-meta';
     const state=document.createElement('span');state.className='part-state';
-    state.textContent=pending ? (pending.beat === null ? 'Preparing…' : `Queued · beat ${Math.floor(pending.beat)+1}`) : playing ? 'Playing' : part?.state === 'finished' ? 'Finished' : part?.state === 'error' ? 'Check output' : 'Ready to play';
+    state.textContent=pending ? (pending.beat === null ? 'Preparing…' : `Queued · beat ${Math.floor(pending.beat)+1}`) : playing ? (!inSource && part?.origin === 'section' ? 'Playing from earlier name' : 'Playing') : part?.state === 'finished' ? 'Finished' : part?.state === 'error' ? 'Check output' : 'Ready to play';
     const controls=document.createElement('div');controls.className='part-buttons';
-    const play=document.createElement('button');play.textContent=playing?'↻ Update':'▶ Run';play.title=`Run ${section.name}`;play.disabled=!ready;play.onclick=()=>void run(section.name);controls.append(play);
+    if (inSource) {const play=document.createElement('button');play.textContent=playing?'↻ Update':'▶ Run';play.title=`Run ${section.name}`;play.disabled=!ready;play.onclick=()=>void run(section.name);controls.append(play);}
     if (playing || pending) {const stop=document.createElement('button');stop.className='part-stop';stop.textContent='■';stop.title=`Stop ${section.name}`;stop.setAttribute('aria-label',`Stop ${section.name}`);stop.onclick=()=>void command({type:'stop',partId:part!.id}).catch(e=>banner(e.message));controls.append(stop);}
     meta.append(state,controls);card.append(title,meta);$('parts').append(card);
   });
-  decorations = editor.deltaDecorations(decorations, docParts.filter(p=>p.revision||p.pending).map(p=>({range:new monaco.Range(Math.min(p.line,active.model.getLineCount()),1,Math.min(p.line,active.model.getLineCount()),1),
+  decorations = editor.deltaDecorations(decorations, docParts.filter(p=>(p.revision||p.pending) && (p.origin === 'function' || active.sections.some(s=>s.name===p.name))).map(p=>({range:new monaco.Range(Math.min(p.line,active.model.getLineCount()),1,Math.min(p.line,active.model.getLineCount()),1),
     options:{isWholeLine:true,linesDecorationsClassName:p.pending?'music-pending-line':'music-playing-line'}})));
 }
 function onEvent(event: EngineEvent) {
@@ -198,26 +236,35 @@ function onEvent(event: EngineEvent) {
     renderParts();
   } else if(event.type==='error'||event.type==='warning'||event.type==='output') {
     const part=parts.find(p=>p.id===event.partId);const doc=documents.get(event.documentId||part?.documentId||'');
-    log(event.type==='output'?event.text||'':event.message||'',event.type==='output'?(event.stream==='stderr'?'error':'info'):event.type,
-      {documentId:doc?.id,line:event.line,name:part?.name||'Python'});
+    const source={documentId:doc?.id,line:event.line,name:part?.name||'Python'};
+    if(event.type==='output') logOutput(event,source);
+    else log(event.message||'',event.type,source);
     if(event.type==='error'&&doc) markError(doc,{message:event.message||'Python error',line:event.line,column:event.column});
   }
 }
 async function save() {try {const doc=active;const source=doc.model.getValue();const filename=await window.pyChanga.save(doc.path,source);if(filename){doc.path=filename;doc.name=filename.split(/[\\/]/).pop()!;doc.saved=source;renderTabs();}}catch(error){banner((error as Error).message);}}
 async function open() {try {const result=await window.pyChanga.open();if(result){const existing=[...documents.values()].find(d=>d.path===result.path);if(existing)activate(existing);else createDocument(result.path.split(/[\\/]/).pop()!,result.source,result.path,true);}}catch(error){banner((error as Error).message);}}
-$('run').onclick=()=>void run();$('stop-all').onclick=()=>void stopAll();$('save').onclick=()=>void save();$('open').onclick=()=>void open();
+function find() { editor.trigger('keyboard', 'actions.find', null); }
+$('run').onclick=()=>void run();$('stop-all').onclick=()=>void stopAll();$('save').onclick=()=>void save();$('open').onclick=()=>void open();$('find').onclick=find;
 $('new').onclick=()=>createDocument('untitled.py','# %% setup\nfrom pyChanga import *\n\n# %% melody\npiano(60, 0.7, 1)\n');
 $('restart').onclick=()=>{ready=false;parts=[];renderParts();$('connection-label').textContent='Restarting…';void window.pyChanga.restart().catch(e=>banner(e.message));};
-$('clear-output').onclick=()=>{$('output').replaceChildren();outputCount=0;$('output-count').textContent='0';};
+$('clear-output').onclick=()=>{$('output').replaceChildren();outputLines.clear();outputCount=0;$('output-count').textContent='0';};
 $('bpm').onchange=()=>void command({type:'tempo',bpm:Number($<HTMLInputElement>('bpm').value)}).catch(e=>banner(e.message));
 $('help').onclick=()=>$<HTMLDialogElement>('help-dialog').showModal();$('close-help').onclick=()=>$<HTMLDialogElement>('help-dialog').close();
 editor.addCommand(monaco.KeyMod.CtrlCmd|monaco.KeyCode.Enter,()=>void run());
 editor.addCommand(monaco.KeyMod.CtrlCmd|monaco.KeyCode.Period,()=>void stopAll());
 editor.addCommand(monaco.KeyMod.CtrlCmd|monaco.KeyCode.KeyS,()=>void save());
 window.addEventListener('keydown',event=>{if((mac?event.metaKey:event.ctrlKey)&&event.key==='.' ){event.preventDefault();void stopAll();}});
+window.addEventListener('keydown',event=>{
+  if ((mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey) &&
+      !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'f') {
+    event.preventDefault();
+    find();
+  }
+}, true);
 editor.onDidChangeCursorPosition(event=>{const {lineNumber,column}=event.position;$('cursor-position').textContent=`Ln ${lineNumber}, Col ${column}`;const section=active?.sections.find(s=>s.markerLine<=lineNumber&&s.endLine>=lineNumber);$('section-label').textContent=section?`PART / ${section.name.toUpperCase()}`:'YOUR COMPOSITION';});
 
-createDocument('first composition.py', '# %% setup\nfrom pyChanga import *\nfrom random import choice\n\nnotes = [60, 64, 67, 72]\n\n# %% melody\n# Run this part. Then change the notes and run it again.\nwhile True:\n    piano(choice(notes), 0.7, 0.5)\n\n# %% bass\n# Bring in a second voice on the same beat.\nwhile True:\n    bass(36, 0.6, 2)\n    bass(43, 0.6, 2)\n\n# %% rhythm\nwhile True:\n    drumSeq("k-h-s-h-", 0.25)\n', null, true);
+createDocument('first composition.py', '# %% setup\nfrom pyChanga import *\nfrom random import choice\n\nnotes = [60, 64, 67, 72]\n\n# %% melody\n# Run this part. Then change the notes and run it again.\nwhile True:\n    piano(choice(notes), 0.7, 0.5)\n\n# %% bass\n# Bring in a second voice on the same beat.\nwhile True:\n    cbass(36, 0.6, 2)\n    cbass(43, 0.6, 2)\n\n# %% rhythm\nwhile True:\n    drumSeq("k-h-s-h-", 0.25)\n', null, true);
 if (window.pyChanga) {
   window.pyChanga.onEvent(onEvent);
   void window.pyChanga.connect().then(event=>{if(event)onEvent(event);});

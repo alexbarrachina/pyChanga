@@ -6,6 +6,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'pyChanga_package'))
 from pyChanga.audio import AudioError, FluidSynthBackend
+from pyChanga.instruments import PROGRAMS
 
 
 def rms(samples):
@@ -15,9 +16,11 @@ def rms(samples):
 class NativeAudioTests(unittest.TestCase):
     def setUp(self):
         try:
-            self.audio = FluidSynthBackend(audio_driver='offline')
+            FluidSynthBackend._load_library(None)
         except (AudioError, OSError) as error:
             self.skipTest(str(error))
+        # Once the library is available, missing or broken bundled presets must fail.
+        self.audio = FluidSynthBackend(audio_driver='offline')
     def tearDown(self):
         if hasattr(self, 'audio'):
             self.audio.close()
@@ -29,6 +32,14 @@ class NativeAudioTests(unittest.TestCase):
         onset = next(index / 48000 for index, sample in enumerate(left) if abs(sample) > .0001)
         self.assertLess(abs(onset - .100), .010)
         self.assertGreater(rms(left[5000:8000]), .001)
+    def test_every_bundled_instrument_can_render(self):
+        for instrument in PROGRAMS:
+            with self.subTest(instrument=instrument):
+                pitch = 36 if instrument == 'drums' else 60
+                self.audio.note_on(instrument, instrument, instrument, pitch, .7, self.audio.now() + .010)
+                left, _ = self.audio.render(24000)
+                self.assertGreater(rms(left), .0001)
+                self.audio.release_owner(instrument)
     def test_cancel_future_prevents_sound(self):
         self.audio.note_on('a', 'one', 'piano', 60, .6, self.audio.now() + .100)
         self.audio.remove_future('one')

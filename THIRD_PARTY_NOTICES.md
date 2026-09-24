@@ -10,15 +10,19 @@ records exact versions and native library hashes in `runtime-manifest.json`.
   Source and releases: https://github.com/FluidSynth/fluidsynth
   The native dependency licenses are retained under `runtime/native/licenses`
   on macOS, and alongside the libraries on Windows.
-- **TimGM6mb**: GPL-2.0-only; copyright 2004 Tim Brechbill and 2010 David Bolton.
-  The unmodified SoundFont, complete license, provenance, and attribution are
-  included under `runtime/packages/pyChanga/sounds`. Its source archive is
-  https://deb.debian.org/debian/pool/main/t/timgm6mb-soundfont/timgm6mb-soundfont_1.3.orig.tar.gz
+- **pyChanga.sf2**: project-provided SoundFont, included under
+  `runtime/packages/pyChanga/sounds`. Its source path and SHA-256 hash are recorded
+  in `runtime-manifest.json`.
 - **Electron**: MIT and its bundled Chromium/third-party licenses. Electron
   license files are retained in the packaged application.
 - **Monaco Editor**: MIT, https://github.com/microsoft/monaco-editor
+- **cloudpickle 3.1.2**: BSD-3-Clause. Used to start independent function
+  instances. Its license is retained at
+  `runtime/packages/pyChanga/_vendor/cloudpickle/LICENSE`.
+  Source: https://pypi.org/project/cloudpickle/3.1.2/
 
-The old E-mu SoundFont and vendored SCAMP/clockblocks reference code are not
-included in new application distributions. The new engine does not copy their
+The old TimGM6mb and E-mu SoundFonts and vendored SCAMP/clockblocks reference code
+are not included in new application distributions. Historical TimGM6mb attribution
+and license files are retained in `legacy/sounds`. The new engine does not copy their
 implementation. This notice does not change the licenses of the original course
 materials or select a license for the user's new application code.

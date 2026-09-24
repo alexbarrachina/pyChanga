@@ -4,10 +4,12 @@ import io
 import linecache
 import os
 from pathlib import Path
+import random
 import sys
 import traceback
 
 from . import api
+from ._vendor import cloudpickle
 
 
 class PartRuntime:
@@ -20,6 +22,8 @@ class PartRuntime:
     def request(self, message):
         self.connection.send(message)
         reply = self.connection.recv()
+        if reply.get("type") == "error":
+            raise RuntimeError(reply["message"])
         if reply.get("type") != "continue":
             raise SystemExit(0)
         return reply
@@ -43,6 +47,23 @@ class PartRuntime:
             self.initial_tempo = bpm
         else:
             self.request({"type": "tempo", "bpm": bpm, "cursor": self.cursor})
+
+    def run(self, function, args, kwargs):
+        if self.preparing:
+            raise RuntimeError("Put run() in a musical part, not setup")
+        try:
+            # Imported helpers such as `from random import randint` are bound
+            # to the module's default generator. Keep that generator in the
+            # same pickle memo so the child can reseed its captured copy.
+            function_payload = cloudpickle.dumps((function, args, kwargs, random.randint.__self__))
+        except Exception as error:
+            raise ValueError(f"Could not launch {function.__name__}: {error}") from error
+        if len(function_payload) > 1_000_000:
+            raise ValueError("A launched function and its arguments must fit within 1 MB")
+        reply = self.request({"type": "run", "name": function.__name__, "function": function_payload,
+                              "line": getattr(getattr(function, "__code__", None), "co_firstlineno", 1),
+                              "cursor": self.cursor})
+        return reply["name"]
 
 
 class Output(io.TextIOBase):
@@ -95,13 +116,21 @@ def run_worker(connection, payload):
     namespace = {"__name__": "__main__", "__file__": filename, "__builtins__": __builtins__}
     phase = "setup"
     try:
-        setup = compile(payload["setup"], filename, "exec")
-        body = compile(payload["body"], filename, "exec")
-        exec(setup, namespace, namespace)
+        if "function" in payload:
+            function, args, kwargs, captured_default_rng = cloudpickle.loads(payload["function"])
+            random.seed()
+            captured_default_rng.seed()
+        else:
+            setup = compile(payload["setup"], filename, "exec")
+            body = compile(payload["body"], filename, "exec")
+            exec(setup, namespace, namespace)
         runtime.request({"type": "ready", "tempo": runtime.initial_tempo})
         runtime.preparing = False
         phase = "runtime"
-        exec(body, namespace, namespace)
+        if "function" in payload:
+            function(*args, **kwargs)
+        else:
+            exec(body, namespace, namespace)
         connection.send({"type": "done", "cursor": runtime.cursor})
     except SystemExit as error:
         if error.code in (None, 0):

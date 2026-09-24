@@ -13,7 +13,8 @@ dependencies = []
 pyChanga = "pyChanga.__main__:main"
 
 [tool.setuptools]
-packages = ["pyChanga"]
+packages = ["pyChanga", "pyChanga._vendor", "pyChanga._vendor.cloudpickle"]
 
 [tool.setuptools.package-data]
-pyChanga = ["sounds/TimGM6mb.sf2", "sounds/*.txt", "sounds/*.json"]
+pyChanga = ["sounds/pyChanga.sf2", "sounds/*.txt", "sounds/*.json"]
+"pyChanga._vendor.cloudpickle" = ["LICENSE"]

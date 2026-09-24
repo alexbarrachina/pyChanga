@@ -25,8 +25,8 @@ while True:
 
 # %% bass
 while True:
-    bass(36, 0.6, 2)
-    bass(43, 0.6, 2)
+    cbass(36, 0.6, 2)
+    cbass(43, 0.6, 2)
 ```
 
 The clock starts at **60 BPM**, equivalent to `tempo(60)`. Change the tempo with
@@ -38,9 +38,58 @@ not setup. Nothing repeats automatically: use ordinary Python loops. A finite
 part finishes after its final scheduled note, including nonblocking notes.
 
 Text before the first section is setup;
-`# %% setup`, when present, must be the first section. A file without sections is
+`# %% setup`, when present, must come before the musical parts. A file without sections is
 one part. Names must be unique within a file. A selection cannot cross sections.
 Selections are dedented and retain their original line numbers for errors.
+
+Add an empty `# %% all` section to launch every musical part in the current file.
+Place the cursor on that line and press **Cmd/Ctrl+Enter**, or click **Run all**
+in the sidebar. All parts prepare their own setup, then start together at the
+selected launch boundary. Running it again replaces all those parts together.
+A syntax or setup error cancels the group launch and leaves existing playback
+running. The launcher may contain comments, but music belongs in named parts:
+
+```python
+# %% setup
+from pyChanga import *
+
+# %% melody
+while True:
+    piano(60, 0.7, 1)
+
+# %% rhythm
+while True:
+    drumSeq("k-h-s-h-")
+
+# %% all
+```
+
+The launcher is a control, so it does not create an extra musical part.
+
+Use `run(function)` to start a function as an independent musical part. Define
+the function in setup, then launch it from a musical section:
+
+```python
+# %% setup
+from pyChanga import *
+
+def melody(note):
+    while True:
+        piano(note, 0.7, 0.5)
+
+# %% conductor
+run(melody, 60)  # melody1
+run(melody, 64)  # melody2, playing at the same time
+```
+
+`run()` returns the new part's name. Each call starts a separate instance, and
+the caller continues immediately without advancing its beat cursor. The sidebar
+shows each instance separately, so you can stop one without stopping the others.
+Helpers imported from `random`, such as `randint` and `choice`, get independent
+random streams in each instance. Use an explicit `Random(seed)` object when you
+want reproducible results.
+Use `# %% all` to start every named section together. If you rename a playing
+`# %%` section and launch the new name, the old part keeps playing until stopped.
 
 
 ## Music API
@@ -53,9 +102,35 @@ schedules a note without advancing the part's cursor, so subsequent notes can
 overlap. Use `wait(beats)` to advance time without a note. Volume zero is silent;
 MIDI pitch zero is a real note.
 
-Available instruments: `piano`, `clarinet`, `oboe`, `violin`, `cbass`, `drums`,
-`viola`, `sax`, `bass`, `organ`, `marimba`, `bassoon`, `choir`, `cello`, `synth`,
-`vibra`, and `guitar`. 
+The bundled `pyChanga.sf2` provides these zero-based presets, all in bank 0:
+
+| Preset | Instrument |
+| --- | --- |
+| 00 | `piano` |
+| 01 | `rhodes` |
+| 02 | `epiano` |
+| 03 | `cbass` |
+| 04 | `drums` |
+| 05 | `chip` |
+| 06 | `bass` |
+| 08 | `vibra` |
+| 12 | `marimba` |
+| 16 | `b3` |
+| 17 | `organ` |
+| 21 | `sh2000` |
+| 22 | `arp` |
+| 23 | `ether` |
+| 40 | `violin` |
+| 41 | `viola` |
+| 42 | `cello` |
+| 50 | `strings` |
+| 68 | `oboe` |
+| 71 | `clarinet` |
+| 72 | `sub` |
+
+Each instrument uses the same arguments as `piano`. The new `bass` preset is
+separate from `cbass`. Older names such as `sax`, `guitar`, and `synth` have been
+replaced in the bundled examples.
 
 - `tempo(bpm)` changes the shared tempo, 20–400 BPM, without resetting beat phase.
   Changes are scheduled beyond the committed audio window. A tempo request in
@@ -64,8 +139,11 @@ Available instruments: `piano`, `clarinet`, `oboe`, `violin`, `cbass`, `drums`,
 - `major_scale(root)`, `natural_minor_scale(root)`, `pentatonic_scale(root)`, and
   `pentatonic_minor_scale(root)` support octave-extending integer degrees, negative
   degrees, and finite slices such as `scale[:8]` and `scale[0:7:2]`.
-- `drumSeq("k-h-s-h-", 0.25)` uses kick 36, snare 38, hi-hat 42, cymbal 49, and
-  tom 45. `-` rests for the supplied duration.
+- `drumSeq("k-h-s-h-", 0.25)` plays the `drums` preset: `k` kick 36, `s` snare 37,
+  `h` hi-hat 48, `c` cymbal 65, `t` tom 55, `o` open hi-hat 68, `m` muted hi-hat 50.
+- `chipSeq("k-h-s-h-", 0.25)` plays the `chip` preset: `k` kick 60, `s` snare 62,
+  `h` hi-hat 63, `c` clave 65, `t` tom 64, `o` open hi-hat 67, `m` muted hi-hat 66.
+  Both sequencers use `-` for a rest and the supplied duration for every step.
 
 
 ## Run from source
@@ -82,7 +160,9 @@ python3 scripts/prepare_runtime.py
 npm run dev
 ```
 
-`prepare_runtime.py` downloads checksum-verified Python and a licensed soundfont.
+`prepare_runtime.py` downloads checksum-verified Python and bundles the local
+`pyChanga_package/pyChanga/sounds/pyChanga.sf2`, recording its SHA-256 hash.
+The soundfont is supplied with the project and requires no download.
 On macOS it also copies and relocates the Homebrew FluidSynth dependency tree.
 Windows builds use the checksum-pinned official FluidSynth archive. This step
 needs the internet; the resulting application does not.
@@ -92,6 +172,10 @@ Set `PYCHANGA_NATIVE_DIR` to the prepared runtime's `native` directory if using 
 FluidSynth libraries. `PYCHANGA_SILENT=1` is an explicit test mode; audio failures do
 not silently switch to fake playback.
 
+The app checks that the audio clock advances before reporting **Audio ready**.
+On macOS, if CoreAudio fails to start playback, it tries the bundled PortAudio
+driver automatically. If neither works, it reports an audio error.
+
 The Python package has no Python dependencies. For command-line use:
 
 ```sh
@@ -100,7 +184,8 @@ python3 -m pyChanga examples/02_variables_and_chords.py
 python3 -m pyChanga examples/01_first_composition.py --part melody
 ```
 
-The CLI runs all named parts unless `--part` is supplied. Ctrl+C stops playback.
+The CLI starts all named parts together unless `--part` selects one.
+`--part all` also launches every part together. Ctrl+C stops playback.
 Importing `pyChanga` alone never opens an audio device. Audio commands need the
 editor or this runner; a bare `python lesson.py` explains how to use the runner.
 
@@ -176,4 +261,3 @@ Set `PYCHANGA_TEST_AUDIO=1` to test real audio; otherwise desktop tests are sile
 Audio-device round-trip latency and clean-machine behavior on each target OS still
 need hardware validation; scheduling precision is not a guarantee of speaker
 latency under arbitrary system load.
-

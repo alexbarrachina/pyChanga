@@ -67,16 +67,15 @@ class FluidSynthBackend:
             self.fluid_settings_setint(self.settings, b"audio.period-size", 128)
             self.fluid_settings_setint(self.settings, b"audio.periods", 3)
             self.fluid_settings_setint(self.settings, b"synth.reverb.active", 1)
-            selected_driver = (None if audio_driver == "offline" else audio_driver) or ("coreaudio" if sys.platform == "darwin" else "wasapi" if sys.platform == "win32" else None)
-            if selected_driver:
-                self.fluid_settings_setstr(self.settings, b"audio.driver", selected_driver.encode())
             self.synth = self.new_fluid_synth(self.settings)
             if not self.synth:
                 raise AudioError("FluidSynth could not create the synthesizer")
-            font = Path(soundfont or os.environ.get("PYCHANGA_SOUNDFONT", Path(__file__).parent / "sounds" / "TimGM6mb.sf2"))
+            font = Path(soundfont or os.environ.get("PYCHANGA_SOUNDFONT", Path(__file__).parent / "sounds" / "pyChanga.sf2"))
             if not font.is_file():
                 raise AudioError(f"Soundfont not found: {font}")
-            self.soundfont = self.fluid_synth_sfload(self.synth, os.fsencode(font), 1)
+            # Each note selects its preset explicitly; avoid a General MIDI reset
+            # looking for a bank-128 kit that the custom soundfont does not contain.
+            self.soundfont = self.fluid_synth_sfload(self.synth, os.fsencode(font), 0)
             if self.soundfont < 0:
                 raise AudioError(f"Could not load soundfont: {font}")
             self.seq = self.new_fluid_sequencer2(0)
@@ -87,12 +86,38 @@ class FluidSynthBackend:
                 raise AudioError("Could not connect the synthesizer to the sequencer")
             self.origin = time.monotonic()
             self.offline = audio_driver == "offline"
-            self.driver = None if self.offline else self.new_fluid_audio_driver(self.settings, self.synth)
-            if not self.offline and not self.driver:
-                raise AudioError("Could not open the audio output. Check your system audio device, then restart audio.")
+            if not self.offline:
+                self._start_audio_driver(audio_driver)
         except BaseException:
             self.close()
             raise
+
+    def _start_audio_driver(self, requested):
+        if requested:
+            drivers = [requested]
+        elif sys.platform == "darwin":
+            drivers = ["coreaudio", "portaudio"]
+        elif sys.platform == "win32":
+            drivers = ["wasapi"]
+        else:
+            drivers = [None]
+        for driver in drivers:
+            if driver and self.fluid_settings_setstr(self.settings, b"audio.driver", driver.encode()) < 0:
+                continue
+            self.driver = self.new_fluid_audio_driver(self.settings, self.synth)
+            if not self.driver:
+                continue
+            # An open device can still have a stalled audio callback. Without samples,
+            # the sequencer never advances and every part stays queued indefinitely.
+            initial_tick = self.fluid_sequencer_get_tick(self.seq)
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                time.sleep(.01)
+                if self.fluid_sequencer_get_tick(self.seq) != initial_tick:
+                    return
+            self.delete_fluid_audio_driver(self.driver)
+            self.driver = None
+        raise AudioError("Could not start audio playback. Check your system audio output, then use Restart audio.")
 
     @staticmethod
     def _load_library(explicit):
@@ -193,8 +218,9 @@ class FluidSynthBackend:
             self.channels[channel] = owner
             self.busy.add(channel)
             self.voices[identity] = Voice(owner, channel, pitch)
-        self.fluid_synth_set_channel_type(self.synth, channel, 1 if instrument == "drums" else 0)
-        if self.fluid_synth_program_select(self.synth, channel, self.soundfont, 128 if instrument == "drums" else 0, PROGRAMS[instrument]) < 0:
+        # The custom drum and chip kits are regular bank-0 presets too.
+        self.fluid_synth_set_channel_type(self.synth, channel, 0)
+        if self.fluid_synth_program_select(self.synth, channel, self.soundfont, 0, PROGRAMS[instrument]) < 0:
             raise AudioError(f"The soundfont does not contain {instrument}")
         self._send(owner, at, "on", channel, pitch, max(1, round(volume * 127)))
 

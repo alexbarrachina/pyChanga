@@ -40,6 +40,11 @@ class Revision:
     quantum: float
     filename: str
     request_id: str | None
+    source: str = ""
+    earliest_beat: float | None = None
+    group: str | None = None
+    ready: bool = False
+    initial_tempo: float | None = None
     start: float | None = None
     stop: float | None = None
     next_cursor: float | None = None
@@ -59,6 +64,7 @@ class Part:
     document_id: str
     filename: str
     line: int
+    origin: str = "section"
     current: Revision | None = None
     pending: Revision | None = None
     state: str = "stopped"
@@ -71,6 +77,7 @@ class Engine:
         self.transport = Transport(self.backend.now())
         self.emit = emit or (lambda event: None)
         self.parts: dict[str, Part] = {}
+        self.launch_groups: dict[str, list[Revision]] = {}
         self.context = mp.get_context("spawn")
         self.reaping = []
         self.last_status = -math.inf
@@ -80,20 +87,53 @@ class Engine:
         self.emit({"version": 1, "type": kind, **fields})
 
     def run(self, request):
+        return self._run(request)
+
+    def run_all(self, request):
+        return self._run(request, all_parts=True)
+
+    def _run(self, request, all_parts=False):
         source = request["source"]
         if not isinstance(source, str) or len(source.encode("utf-8")) > 1_000_000:
             raise ValueError("A document must contain at most 1 MB of Python source")
         filename = request.get("filename") or "untitled.py"
-        document, section, body = execution(source, filename, request.get("selection"), request.get("name"))
+        if all_parts:
+            document = parse_document(source)
+        else:
+            document, section, body = execution(source, filename, request.get("selection"), request.get("name"))
+            all_parts = section.name == "all"
+        # Compile every part before changing any currently playing revision.
+        if all_parts:
+            sections = [execution(source, filename, name=p.name)[1:] for p in document.parts]
+        else:
+            sections = [(section, body)]
         document_id = str(request.get("documentId", filename))
-        identity = f"{document_id}::{section.name}"
         quantum = {"immediate": 0, "beat": 1, "bar": 4}.get(request.get("quantization", "beat"))
         if quantum is None:
             raise ValueError("Launch timing must be immediate, beat or bar")
-        active = sum(bool(p.current or p.pending) for p in self.parts.values())
-        part = self.parts.get(identity)
-        if active >= MAX_PARTS and (part is None or not (part.current or part.pending)):
+        active = {p.identity for p in self.parts.values() if p.current or p.pending}
+        requested = {f"{document_id}::{section.name}" for section, _ in sections}
+        if len(active | requested) > MAX_PARTS:
             raise ValueError(f"At most {MAX_PARTS} musical parts can run at once")
+        grouped = all_parts
+        group = uuid.uuid4().hex if grouped else None
+        if group:
+            self.launch_groups[group] = []
+        results = []
+        try:
+            for section, body in sections:
+                result = self._prepare(request, document, section, body, filename, document_id, quantum, group)
+                results.append(result)
+        except BaseException:
+            if group:
+                self._cancel_group(group)
+            raise
+        self.status(force=True)
+        return {"parts": results} if grouped else results[0]
+
+    def _prepare(self, request, document, section, body, filename, document_id, quantum, group):
+        identity = f"{document_id}::{section.name}"
+        part = self.parts.get(identity)
         if part is None:
             if len(self.parts) >= 128:
                 oldest = next((key for key, p in self.parts.items() if not (p.current or p.pending)), None)
@@ -105,9 +145,10 @@ class Engine:
         part.filename, part.line, part.error = filename, section.start_line, None
         parent, child = self.context.Pipe()
         revision_id = uuid.uuid4().hex
-        payload = {"source": source, "filename": filename, "setup": document.setup, "body": body}
+        payload = {"source": request["source"], "filename": filename, "setup": document.setup, "body": body}
         process = self.context.Process(target=run_worker, args=(child, payload), name=f"pyChanga: {section.name}", daemon=True)
-        revision = Revision(revision_id, identity, process, parent, quantum, filename, request.get("requestId"))
+        revision = Revision(revision_id, identity, process, parent, quantum, filename, request.get("requestId"),
+                            source=request["source"], group=group)
         try:
             process.start()
         except BaseException:
@@ -116,8 +157,9 @@ class Engine:
             raise
         child.close()
         part.pending = revision
+        if group:
+            self.launch_groups[group].append(revision)
         part.state = "playing" if part.current else "preparing"
-        self.status(force=True)
         return {"partId": identity, "revision": revision_id, "name": section.name}
 
     def set_tempo(self, bpm, earliest_beat=None):
@@ -149,7 +191,8 @@ class Engine:
             elif kind == "parse":
                 document = parse_document(request["source"])
                 result = {"parts": [{"name": p.name, "line": p.start_line, "markerLine": p.marker_line,
-                                      "endLine": p.end_line} for p in document.parts]}
+                                      "endLine": p.end_line, "kind": "all" if p.name == "all" else "part"}
+                                     for p in document.sections]}
             elif kind == "status":
                 result = self.snapshot()
             elif kind == "shutdown":
@@ -172,15 +215,15 @@ class Engine:
         kind = message["type"]
         now = self.backend.now()
         if kind == "ready":
-            revision.start = self.transport.boundary(now + LOOKAHEAD + GUARD, revision.quantum)
-            if message.get("tempo") is not None:
-                # Setup completed successfully; apply its requested tempo at the launch beat.
-                self.transport.set_tempo(message["tempo"], revision.start)
-                self.event("tempo", bpm=message["tempo"], effectiveBeat=revision.start)
-            if part.current:
-                part.current.stop = revision.start
-            self._reply(revision)
-            self.event("scheduled", partId=part.identity, revision=revision.identity, beat=revision.start)
+            revision.ready = True
+            revision.initial_tempo = message.get("tempo")
+            if revision.group:
+                members = self.launch_groups[revision.group]
+                if all(member.ready for member in members):
+                    self.launch_groups.pop(revision.group)
+                    self._launch(members)
+            else:
+                self._launch([revision])
         elif kind in ("note", "wait"):
             if revision.start is None:
                 raise ValueError("The part has not completed setup")
@@ -202,6 +245,8 @@ class Engine:
         elif kind == "tempo":
             self.set_tempo(message["bpm"], revision.start + message["cursor"])
             self._reply(revision)
+        elif kind == "run":
+            self._run_from_part(part, revision, message)
         elif kind == "output":
             if now - revision.output_epoch >= 1:
                 revision.output_epoch, revision.output_bytes, revision.output_warned = now, 0, False
@@ -214,12 +259,87 @@ class Engine:
                 revision.output_warned = True
             self._reply(revision)
         elif kind == "done":
+            if revision.start is None:
+                self._fail(part, revision, {"message": "The part exited before completing setup", "filename": revision.filename, "line": part.line})
+                return
             revision.done = True
             revision.cursor = message["cursor"]
         elif kind == "error":
             self._fail(part, revision, message)
         else:
             raise ValueError(f"Invalid worker message: {kind}")
+
+    def _launch(self, revisions):
+        earliest = self.backend.now() + LOOKAHEAD + GUARD
+        for revision in revisions:
+            if revision.earliest_beat is not None:
+                earliest = max(earliest, self.transport.time_at(revision.earliest_beat))
+        start = self.transport.boundary(earliest, revisions[0].quantum)
+        for revision in revisions:
+            revision.group, revision.start = None, start
+            if revision.initial_tempo is not None:
+                self.transport.set_tempo(revision.initial_tempo, start)
+                self.event("tempo", bpm=revision.initial_tempo, effectiveBeat=start)
+            part = self.parts[revision.part_id]
+            if part.current:
+                part.current.stop = start
+            self._reply(revision)
+            self.event("scheduled", partId=part.identity, revision=revision.identity, beat=start)
+
+    def _run_from_part(self, part, revision, message):
+        try:
+            if revision.start is None:
+                raise ValueError("Put run() in a musical part, not setup")
+            active = sum(bool(p.current or p.pending) for p in self.parts.values())
+            if active >= MAX_PARTS:
+                self.event("warning", partId=part.identity, revision=revision.identity,
+                           documentId=part.document_id,
+                           message=f"At most {MAX_PARTS} musical parts can run at once; skipped run({message['name']}).")
+                revision.connection.send({"type": "continue", "name": None})
+                return
+            base = message["name"]
+            if not isinstance(base, str) or not base.isidentifier():
+                raise ValueError("run() needs a named function")
+            blob = message["function"]
+            if not isinstance(blob, bytes) or len(blob) > 1_000_000:
+                raise ValueError("A launched function and its arguments must fit within 1 MB")
+            reserved = {section.name for section in parse_document(revision.source).sections}
+            index = 1
+            while True:
+                name = f"{base}{index}"
+                identity = f"{part.document_id}::function::{name}"
+                existing = self.parts.get(identity)
+                if name not in reserved and not (existing and (existing.current or existing.pending)):
+                    break
+                index += 1
+            if existing is None:
+                if len(self.parts) >= 128:
+                    oldest = next((key for key, p in self.parts.items() if not (p.current or p.pending)), None)
+                    if oldest:
+                        del self.parts[oldest]
+                existing = Part(identity, name, part.document_id, revision.filename, message["line"], origin="function")
+                self.parts[identity] = existing
+            existing.filename, existing.line, existing.error = revision.filename, message["line"], None
+            parent, child = self.context.Pipe()
+            payload = {"source": revision.source, "filename": revision.filename, "function": blob}
+            process = self.context.Process(target=run_worker, args=(child, payload), name=f"pyChanga: {name}", daemon=True)
+            launched = Revision(uuid.uuid4().hex, identity, process, parent, revision.quantum, revision.filename,
+                                revision.request_id, source=revision.source,
+                                earliest_beat=revision.start + message["cursor"])
+            try:
+                process.start()
+            except BaseException:
+                parent.close()
+                child.close()
+                raise
+            child.close()
+            existing.pending = launched
+            existing.state = "preparing"
+            revision.connection.send({"type": "continue", "name": name})
+            self.status(force=True)
+        except Exception as error:
+            # Raise at the user's call site, allowing normal Python try/except.
+            revision.connection.send({"type": "error", "message": str(error)})
 
     def _fail(self, part, revision, error):
         part.error = {key: error[key] for key in ("message", "filename", "line", "column", "traceback", "phase") if key in error}
@@ -244,10 +364,20 @@ class Engine:
 
     def _cancel_pending(self, part):
         if part.pending:
+            if part.pending.group:
+                self._cancel_group(part.pending.group)
+                return
             self._terminate(part.pending)
             part.pending = None
             if part.current:
                 self._restore(part.current)
+
+    def _cancel_group(self, group):
+        for revision in self.launch_groups.pop(group, []):
+            revision.group = None
+            part = self.parts[revision.part_id]
+            self._cancel_pending(part)
+            part.state = "playing" if part.current else "error" if part.error else "stopped"
 
     def _terminate(self, revision, immediate=True):
         self.backend.release_owner(revision.identity, immediate=immediate)
@@ -261,9 +391,9 @@ class Engine:
         part = self.parts.get(identity)
         if not part:
             return
-        for revision in (part.pending, part.current):
-            if revision:
-                self._terminate(revision)
+        self._cancel_pending(part)
+        if part.current:
+            self._terminate(part.current)
         part.pending = part.current = None
         part.state, part.error = "stopped", None
         self.status(force=True)
@@ -359,7 +489,7 @@ class Engine:
         future = next((s for s in self.transport.segments if s.seconds > now), None)
         return {"beat": self.transport.beat_at(now), "bpm": self.transport.bpm_at(now),
                 "pendingTempo": {"bpm": future.bpm, "beat": future.beat} if future else None,
-                "parts": [{"id": p.identity, "name": p.name, "documentId": p.document_id, "filename": p.filename,
+                "parts": [{"id": p.identity, "name": p.name, "origin": p.origin, "documentId": p.document_id, "filename": p.filename,
                            "line": p.line, "state": p.state, "revision": p.current.identity if p.current else None,
                            "pending": {"revision": p.pending.identity, "beat": p.pending.start} if p.pending else None,
                            "error": p.error} for p in self.parts.values()]}

@@ -11,6 +11,7 @@ class Runtime(Protocol):
     def note(self, instrument: str, pitches: list[int], volume: float, duration: float, block: bool) -> None: ...
     def wait(self, beats: float) -> None: ...
     def tempo(self, bpm: float) -> None: ...
+    def run(self, function, args: tuple, kwargs: dict) -> str | None: ...
 
 
 _runtime: Runtime | None = None
@@ -44,6 +45,19 @@ def wait(beats: float) -> None:
 def tempo(bpm: float) -> None:
     """Change the shared tempo on the next available beat (20–400 BPM)."""
     _context().tempo(_number(bpm, "Tempo", 20, 400))
+
+
+def run(function, *args, **kwargs) -> str | None:
+    """Start an independent, numbered instance of a Python function.
+
+    The function receives any supplied arguments. Playback continues without
+    advancing the caller's beat cursor. Returns the instance name, or None
+    when the 32-part limit prevents launch.
+    """
+    name = getattr(function, "__name__", None)
+    if not callable(function) or not isinstance(name, str) or not name.isidentifier():
+        raise ValueError("run() needs a named function, for example run(melody)")
+    return _context().run(function, args, kwargs)
 
 
 def _player(instrument: str):
@@ -81,18 +95,18 @@ for _name in PROGRAMS:
 
 
 def set_drums3():
-    """Compatibility helper; uses the bundled General MIDI drum kit."""
+    """Compatibility helper; uses the bundled pyChanga drum kit."""
     return None
 
 
 def drumSeq(seq: str, dur: float = 0.25) -> None:
-    """Play k=kick, s=snare, h=hi-hat, c=cymbal, t=tom, -=rest."""
+    """Play k=kick, s=snare, h=hi-hat, c=cymbal, t=tom, o=openHat, m=mutedHat, -=rest."""
     _number(dur, "Duration", 0)
     if dur == 0:
         raise ValueError("Duration must be greater than zero")
-    mapping = {"k": 36, "s": 38, "h": 42, "c": 49, "t": 45}
-    if not isinstance(seq, str) or any(c not in "kshct-" for c in seq):
-        raise ValueError("Drum sequences use only k, s, h, c, t and -")
+    mapping = {"k": 36, "s": 37, "h": 48, "c": 65, "t": 55, "o": 68, "m": 50}
+    if not isinstance(seq, str) or any(c not in "kshctom-" for c in seq):
+        raise ValueError("Drum sequences use only k, s, h, c, t, o, m and -")
     for character in seq:
         if character == "-":
             wait(dur)
@@ -100,11 +114,26 @@ def drumSeq(seq: str, dur: float = 0.25) -> None:
             drums(mapping[character], 0.7, dur)
 
 
+def chipSeq(seq: str, dur: float = 0.25) -> None:
+    """Play k=kick, s=snare, h=hi-hat, c=clave, t=tom, o=openHat, m=mutedHat, -=rest."""
+    _number(dur, "Duration", 0)
+    if dur == 0:
+        raise ValueError("Duration must be greater than zero")
+    mapping = {"k": 60, "s": 62, "h": 63, "c": 65, "t": 64, "o": 67, "m": 66}
+    if not isinstance(seq, str) or any(c not in "kshctom-" for c in seq):
+        raise ValueError("Chip sequences use only k, s, h, c, t, o, m and -")
+    for character in seq:
+        if character == "-":
+            wait(dur)
+        else:
+            chip(mapping[character], 0.7, dur)
+
+
 def char2ascii(char):
     """Legacy course helper: test whether a character is alphanumeric."""
     return char.isalnum()
 
 
-__all__ = [*PROGRAMS, *(f"set_{name}" for name in PROGRAMS), "set_drums3", "wait", "tempo",
+__all__ = [*PROGRAMS, *(f"set_{name}" for name in PROGRAMS), "set_drums3", "wait", "tempo", "run",
            "Scale", "major_scale", "natural_minor_scale", "pentatonic_scale", "pentatonic_minor_scale",
-           "drumSeq", "char2ascii"]
+           "drumSeq", "chipSeq", "char2ascii"]

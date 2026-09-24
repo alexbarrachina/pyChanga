@@ -6,7 +6,5 @@
     "darwin-x64": {"asset": "cpython-3.13.15+20260901-x86_64-apple-darwin-install_only.tar.gz", "sha256": "49f0d97f506b855eed60b74a8ac138595c5b39799a6aa5e0d7ca8abe1019a4d4"},
     "win32-x64": {"asset": "cpython-3.13.15+20260901-x86_64-pc-windows-msvc-install_only.tar.gz", "sha256": "9bcc038a0bf180612ed56dec93d4977d035e80b8d9320ef51a38c287baf134b7"}
   },
-  "fluidsynthWindows": {"version": "2.6.1", "asset": "fluidsynth-v2.6.1-win10-x64-cpp11.zip", "sha256": "fab7a2e4b85675b66970f97a39bbc239729c5e0f237198b5922a6a73cbc8677c"},
-  "soundfontSource": "https://deb.debian.org/debian/pool/main/t/timgm6mb-soundfont/timgm6mb-soundfont_1.3.orig.tar.gz",
-  "soundfontDescription": "https://deb.debian.org/debian/pool/main/t/timgm6mb-soundfont/timgm6mb-soundfont_1.3-5.dsc"
+  "fluidsynthWindows": {"version": "2.6.1", "asset": "fluidsynth-v2.6.1-win10-x64-cpp11.zip", "sha256": "fab7a2e4b85675b66970f97a39bbc239729c5e0f237198b5922a6a73cbc8677c"}
 }

@@ -1,7 +1,7 @@
-"""Zero-based General MIDI programs (drums use bank 128)."""
+"""Zero-based presets in pyChanga.sf2. All instruments use bank 0."""
 PROGRAMS = {
-    "piano": 0, "clarinet": 71, "oboe": 68, "violin": 40, "cbass": 43,
-    "drums": 0, "viola": 41, "sax": 65, "bass": 33, "organ": 19,
-    "marimba": 12, "bassoon": 70, "choir": 52, "cello": 42, "synth": 50,
-    "vibra": 11, "guitar": 24,
+    "piano": 0, "rhodes": 1, "epiano": 2, "cbass": 3, "drums": 4,
+    "chip": 5, "bass": 6, "vibra": 8, "marimba": 12, "b3": 16, "organ": 17,
+    "sh2000": 21, "arp": 22, "ether": 23, "violin": 40, "viola": 41,
+    "cello": 42, "strings": 50, "oboe": 68, "clarinet": 71, "sub": 72,
 }

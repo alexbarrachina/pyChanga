@@ -25,8 +25,8 @@ use `--public` instead of `--private` if you want everyone to see the source.
 If Git asks for your author name/email, follow its instructions, then retry the commit.
 
 The `.gitignore` keeps downloaded runtimes, dependencies, generated applications,
-test output, and historical E-mu soundfonts out of the repository. The licensed
-TimGM6mb soundfont inside the Python package stays included.
+test output, and historical E-mu soundfonts out of the repository. The custom
+`pyChanga.sf2` soundfont inside the Python package stays included.
 
 These steps follow [GitHub's existing-code upload guide](https://docs.github.com/en/migrations/importing-source-code/using-the-command-line-to-import-source-code/adding-locally-hosted-code-to-github)
 and the [GitHub CLI repository command](https://cli.github.com/manual/gh_repo_create).
