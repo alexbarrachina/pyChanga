@@ -22,6 +22,8 @@ Read these files in the order of the behavior you want to change:
 | File | What it owns |
 | --- | --- |
 | `api.py` | Public music functions and argument validation; the small `Runtime` contract |
+| `session.py` | Lazy ordinary-Python client, REPL output, and interpreter-exit cleanup |
+| `function_capture.py` | Shared function capture for `run()`, including argument limits and worker random streams |
 | `instruments.py`, `scales.py` | Instrument presets and musical scale values |
 | `sections.py` | `# %%` document parsing and source selections |
 | `execution.py` | Compilation and preparation of a complete `LaunchPlan`, before playback changes |
@@ -43,15 +45,17 @@ events. These are internal integration APIs; the teaching API is exported from
 
 ## From a command to sound
 
-1. The CLI reads a file, or the editor submits its source and selection through
-   the desktop bridge. Source is parsed and compiled before workers are started.
+1. The CLI reads a file, the editor submits its source through the desktop
+   bridge, or ordinary Python starts the package service on its first musical
+   call. Source documents are parsed and compiled before workers are started.
 2. The engine starts a Python **process** for each part. It binds the musical API
    inside that process to `PartRuntime`, then executes setup.
 3. After setup succeeds, the engine chooses a shared launch boundary. An existing
    revision continues until its replacement is ready to take over.
-4. `piano()` validates a note and asks the worker runtime to send it to the engine.
-   A blocking note advances that part's beat cursor; `block=False` leaves the
-   cursor in place. `wait()` advances it without a note.
+4. `piano()` validates a note and asks the bound runtime to send it to the
+   engine. Workers have a local beat cursor; the REPL has a direct-note cursor
+   that resynchronizes after idle time. Blocking notes advance the cursor;
+   `block=False` leaves it in place. `wait()` advances it without a note.
 5. The engine keeps notes in beats until they enter the 100 ms scheduling window.
    `Transport` converts those beats to seconds. The audio backend sends timed
    note-on and note-off events to FluidSynth's native sequencer.
@@ -63,6 +67,10 @@ reference. Each worker has its own cursor and namespace. `run(function)` capture
 the function and its arguments and asks the engine to start another process.
 It does not create another clock or audio device. The service's reader and writer
 threads only move messages; its main thread alone calls the engine.
+The engine also owns the persistent launch mode. Worker setup instructions are
+applied before choosing a section boundary; a grouped launch applies setup
+changes in document order and gives every member one boundary. The editor
+selector reads and writes this package setting.
 
 ## Rules to preserve when changing playback
 
@@ -95,11 +103,12 @@ FluidSynth is a native dependency, separate from Python package dependencies.
 The package includes its soundfont; the desktop installer additionally bundles
 Python and native libraries for its own users.
 
-A plain Python REPL can import the API and use pure helpers such as scales, but
-cannot yet start playback directly. The public session interface discussed for
-REPL users is still to be implemented. It belongs in the Python package and
-should reuse the same engine, clock, and audio backend. `Engine.start(plan)` is
-an internal launch operation, not that future session interface.
+A plain Python REPL or `python song.py` can use the music API directly. The
+first musical call creates a package-owned service, with no explicit session
+start or stop. Script exit drains scheduled notes and parts; REPL exit closes
+the service. `# %%` documents use `python -m pyChanga song.py` or the IDE for
+their multiple-section behavior. `Engine.start(plan)` remains an internal
+launch operation.
 
 ## Development checks
 

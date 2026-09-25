@@ -1,6 +1,7 @@
 import pathlib
 import sys
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "pyChanga_package"))
 import pyChanga
@@ -21,6 +22,15 @@ class FakeRuntime:
     def run(self, function, args, kwargs):
         self.calls.append(("run", function, args, kwargs))
         return function.__name__ + '1'
+    def launch_mode(self, mode):
+        self.calls.append(("launch_mode", mode))
+    def stop(self, part):
+        self.calls.append(("stop", part))
+    def stop_all(self):
+        self.calls.append(("stop_all",))
+    def status(self):
+        self.calls.append(("status",))
+        return {"launchMode": "beat"}
 
 
 class MusicTests(unittest.TestCase):
@@ -93,8 +103,25 @@ class MusicTests(unittest.TestCase):
         self.assertFalse(hasattr(pyChanga, "wait_forever"))
         api._bind(None)
         pyChanga.set_piano()
-        with self.assertRaisesRegex(RuntimeError, "python -m pyChanga"):
+        with patch('pyChanga.session.DefaultRuntime', return_value=self.runtime) as create:
+            self.assertEqual(pyChanga.major_scale(60)[0], 60)
+            self.assertEqual(pyChanga.status()['launchMode'], 'beat')
+            pyChanga.stop_all()
+            create.assert_not_called()
             pyChanga.piano(60, 1, 1)
+            create.assert_called_once()
+        self.assertEqual(self.runtime.calls, [("note", "piano", [60], 1.0, 1.0, True)])
+
+    def test_session_controls_forward_to_the_runtime(self):
+        pyChanga.start_immediate()
+        pyChanga.start_on_bar()
+        pyChanga.start_on_beat()
+        pyChanga.stop("melody1")
+        pyChanga.stop_all()
+        self.assertEqual(pyChanga.status(), {"launchMode": "beat"})
+        self.assertEqual(self.runtime.calls, [("launch_mode", "immediate"), ("launch_mode", "bar"),
+                                              ("launch_mode", "beat"), ("stop", "melody1"),
+                                              ("stop_all",), ("status",)])
 
 
 class SectionTests(unittest.TestCase):

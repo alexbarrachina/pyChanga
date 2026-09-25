@@ -4,12 +4,11 @@ import io
 import linecache
 import os
 from pathlib import Path
-import random
 import sys
 
 from . import api
-from ._vendor import cloudpickle
 from .errors import error_info
+from .function_capture import capture_function, restore_function
 
 
 class PartRuntime:
@@ -51,19 +50,23 @@ class PartRuntime:
     def run(self, function, args, kwargs):
         if self.preparing:
             raise RuntimeError("Put run() in a musical part, not setup")
-        try:
-            # Imported helpers such as `from random import randint` are bound
-            # to the module's default generator. Keep that generator in the
-            # same pickle memo so the child can reseed its captured copy.
-            function_payload = cloudpickle.dumps((function, args, kwargs, random.randint.__self__))
-        except Exception as error:
-            raise ValueError(f"Could not launch {function.__name__}: {error}") from error
-        if len(function_payload) > 1_000_000:
-            raise ValueError("A launched function and its arguments must fit within 1 MB")
+        function_payload = capture_function(function, args, kwargs)
         reply = self.request({"type": "run", "name": function.__name__, "function": function_payload,
                               "line": getattr(getattr(function, "__code__", None), "co_firstlineno", 1),
                               "cursor": self.cursor})
         return reply["name"]
+
+    def launch_mode(self, mode):
+        self.request({"type": "launch_mode", "mode": mode})
+
+    def stop(self, part):
+        self.request({"type": "stop", "partId": part})
+
+    def stop_all(self):
+        self.request({"type": "stop_all"})
+
+    def status(self):
+        return self.request({"type": "status"})["status"]
 
 
 class Output(io.TextIOBase):
@@ -108,9 +111,7 @@ def run_worker(connection, payload):
     phase = "setup"
     try:
         if "function" in payload:
-            function, args, kwargs, captured_default_rng = cloudpickle.loads(payload["function"])
-            random.seed()
-            captured_default_rng.seed()
+            function, args, kwargs = restore_function(payload["function"])
         else:
             setup = compile(payload["setup"], filename, "exec")
             body = compile(payload["body"], filename, "exec")

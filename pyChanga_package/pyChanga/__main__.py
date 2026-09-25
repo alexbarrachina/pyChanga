@@ -40,7 +40,8 @@ def main():
         if args.part and args.part != "all" and args.part not in [p.name for p in document.parts]:
             raise ValueError(f"No section named {args.part!r}")
         engine = Engine(RecordingBackend() if args.silent else FluidSynthBackend(), emit)
-        request = {"source": source, "filename": str(filename), "quantization": args.quantization}
+        engine.set_launch_mode(args.quantization)
+        request = {"source": source, "filename": str(filename)}
         if args.part is None or args.part == "all":
             engine.run_all(request)
         else:

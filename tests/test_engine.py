@@ -1,4 +1,6 @@
 import pathlib
+import base64
+import random
 import sys
 import time
 import unittest
@@ -7,6 +9,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "pyChanga_package"))
 from pyChanga.audio import RecordingBackend
 from pyChanga.engine import Engine
+from pyChanga._vendor import cloudpickle
+from pyChanga.protocol import handle_command
 
 
 class EngineTests(unittest.TestCase):
@@ -38,6 +42,93 @@ class EngineTests(unittest.TestCase):
         on = next(e for e in notes if e['type'] == 'on')
         off = next(e for e in notes if e['type'] == 'off')
         self.assertAlmostEqual(off['at'] - on['at'], 0.4, places=5)
+
+    def test_direct_notes_advance_then_resynchronize_after_idle(self):
+        first = self.engine.direct_note({'instrument': 'piano', 'pitches': [60], 'volume': .5,
+                                         'duration': .05, 'block': True})
+        second = self.engine.direct_note({'instrument': 'piano', 'pitches': [64], 'volume': .5,
+                                          'duration': .05, 'block': True})
+        self.assertAlmostEqual(second['beat'] - first['beat'], .05, places=4)
+        self.until(lambda: len([e for e in self.backend.events if e['type'] == 'on']) == 2)
+        time.sleep(.15)
+        third = self.engine.direct_note({'instrument': 'piano', 'pitches': [67], 'volume': .5,
+                                         'duration': .05, 'block': False})
+        self.assertGreater(third['beat'], second['beat'] + .05)
+        self.until(lambda: not self.engine.live_notes)
+        self.assertEqual([e['pitch'] for e in self.backend.events if e['type'] == 'on'], [60, 64, 67])
+
+    def test_setup_timing_controls_its_own_launch_and_persists(self):
+        source = '# %% setup\nfrom pyChanga import *\nstart_on_bar()\n# %% melody\npiano(60,.5,.1)\n'
+        launched = self.engine.run({'source': source, 'filename': 'mode.py', 'name': 'melody'})
+        part = self.engine.parts[launched['partId']]
+        self.until(lambda: part.pending is not None and part.pending.start is not None)
+        self.assertEqual(part.pending.start % 4, 0)
+        self.assertEqual(self.engine.snapshot()['launchMode'], 'bar')
+        self.engine.stop(launched['partId'])
+        source = '# %% setup\nfrom pyChanga import *\n# %% melody\npiano(60,.5,.1)\n'
+        launched = self.engine.run({'source': source, 'filename': 'mode.py', 'name': 'melody'})
+        part = self.engine.parts[launched['partId']]
+        self.until(lambda: part.pending is not None and part.pending.start is not None)
+        self.assertEqual(part.pending.start % 4, 0)
+
+    def test_direct_tempo_and_run_respect_the_repl_cursor(self):
+        self.engine.set_launch_mode('immediate')
+        self.engine.direct_note({'instrument': 'piano', 'pitches': [60], 'volume': .5,
+                                 'duration': 2, 'block': True})
+        cursor = self.engine.live_cursor
+        response = handle_command(self.engine, {'version': 1, 'type': 'direct_tempo',
+                                                'requestId': 'tempo', 'bpm': 120})
+        self.assertTrue(response['ok'])
+        self.assertGreaterEqual(response['result']['effectiveBeat'], cursor)
+        def melody():
+            pass
+        payload = cloudpickle.dumps((melody, (), {}, random.randint.__self__))
+        result = self.engine.run_callable({'name': 'melody', 'function': base64.b64encode(payload).decode(),
+                                           'filename': '<stdin>'})
+        part = next(p for p in self.engine.parts.values() if p.name == result['name'])
+        self.until(lambda: part.pending is not None and part.pending.start is not None)
+        self.assertGreaterEqual(part.pending.start, cursor)
+
+    def test_group_setup_modes_use_document_order_and_one_boundary(self):
+        setup = ('from multiprocessing import current_process\nimport time\n'
+                 'if current_process().name.endswith("fast"):\n'
+                 '    time.sleep(.15)\n    start_on_bar()\n'
+                 'else:\n    start_on_beat()')
+        source = ('# %% setup\nfrom pyChanga import *\n' + setup +
+                  '\n# %% fast\npiano(60,.5,.1)\n# %% slow\npiano(64,.5,.1)\n')
+        result = self.engine.run_all({'source': source, 'filename': 'group-mode.py'})
+        members = [self.engine.parts[p['partId']] for p in result['parts']]
+        self.until(lambda: all(p.pending and p.pending.start is not None for p in members))
+        beats = [p.pending.start for p in members]
+        self.assertEqual(beats[0], beats[1])
+        self.assertEqual(beats[0] % 1, 0)
+        self.assertEqual(self.engine.launch_mode, 'beat')
+
+    def test_part_can_inspect_and_stop_a_launched_function(self):
+        source = ('# %% setup\nfrom pyChanga import *\n'
+                  'def melody():\n    while True: piano(60,.5,.1)\n'
+                  '# %% conductor\n'
+                  'name=run(melody)\n'
+                  'print(status()["launchMode"], name)\n'
+                  'stop(name)\n')
+        self.engine.set_launch_mode('immediate')
+        result = self.engine.run({'source': source, 'filename': 'controls.py', 'name': 'conductor'})
+        self.until(lambda: self.engine.parts[result['partId']].state == 'finished')
+        child = next(p for p in self.engine.parts.values() if p.origin == 'function')
+        self.assertEqual(child.state, 'stopped')
+        output = ''.join(e['text'] for e in self.events if e['type'] == 'output')
+        self.assertIn('immediate melody1', output)
+
+    def test_runtime_timing_instruction_controls_nested_run(self):
+        source = ('# %% setup\nfrom pyChanga import *\nstart_immediate()\n'
+                  'def melody():\n    piano(60,.5,.1)\n'
+                  '# %% conductor\nstart_on_bar()\nrun(melody)\n')
+        self.engine.run({'source': source, 'filename': 'nested-mode.py', 'name': 'conductor'})
+        self.until(lambda: any(p.origin == 'function' and p.pending and p.pending.start is not None
+                               for p in self.engine.parts.values()))
+        child = next(p for p in self.engine.parts.values() if p.origin == 'function')
+        self.assertEqual(child.pending.start % 4, 0)
+        self.assertEqual(self.engine.launch_mode, 'bar')
     def test_setup_and_syntax_errors_keep_old_part(self):
         original = self.run_part('while True:\n    piano(60, 0.5, 0.25)')
         part = self.engine.parts[original['partId']]

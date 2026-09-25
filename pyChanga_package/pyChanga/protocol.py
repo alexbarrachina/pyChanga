@@ -31,6 +31,14 @@ def _dispatch(engine, request: dict) -> dict:
     kind = request.get("type")
     if kind == "run":
         return engine.run(request)
+    if kind == "run_callable":
+        return engine.run_callable(request)
+    if kind == "note":
+        return engine.direct_note(request)
+    if kind == "wait":
+        return engine.direct_wait(request["beats"])
+    if kind == "launch_mode":
+        return engine.set_launch_mode(request["mode"])
     if kind == "stop":
         engine.stop(request["partId"])
         return {}
@@ -39,6 +47,8 @@ def _dispatch(engine, request: dict) -> dict:
         return {}
     if kind == "tempo":
         return engine.set_tempo(request["bpm"])
+    if kind == "direct_tempo":
+        return engine.set_tempo(request["bpm"], engine.live_cursor)
     if kind == "parse":
         document = parse_document(request["source"])
         return {

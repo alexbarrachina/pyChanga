@@ -2,6 +2,7 @@
 from __future__ import annotations
 from math import isfinite
 from numbers import Real
+from threading import Lock
 from typing import Protocol
 from .instruments import PROGRAMS
 from .scales import Scale, major_scale, natural_minor_scale, pentatonic_scale, pentatonic_minor_scale
@@ -14,9 +15,14 @@ class Runtime(Protocol):
     def wait(self, beats: float) -> None: ...
     def tempo(self, bpm: float) -> None: ...
     def run(self, function, args: tuple, kwargs: dict) -> str | None: ...
+    def launch_mode(self, mode: str) -> None: ...
+    def stop(self, part: str) -> None: ...
+    def stop_all(self) -> None: ...
+    def status(self) -> dict: ...
 
 
 _runtime: Runtime | None = None
+_runtime_lock = Lock()
 
 
 def _bind(runtime: Runtime | None) -> None:
@@ -35,9 +41,48 @@ def _number(value: Real, name: str, minimum: float, maximum: float | None = None
 
 
 def _context() -> Runtime:
+    global _runtime
     if _runtime is None:
-        raise RuntimeError("No active pyChanga runtime. Run a file with: python -m pyChanga lesson.py")
+        with _runtime_lock:
+            if _runtime is None:
+                from .session import DefaultRuntime
+                _runtime = DefaultRuntime()
     return _runtime
+
+
+def start_immediate() -> None:
+    """Launch subsequent parts as soon as they are ready."""
+    _context().launch_mode("immediate")
+
+
+def start_on_beat() -> None:
+    """Launch subsequent parts on the next beat."""
+    _context().launch_mode("beat")
+
+
+def start_on_bar() -> None:
+    """Launch subsequent parts on the next four-beat bar."""
+    _context().launch_mode("bar")
+
+
+def stop(part: str) -> None:
+    """Stop a launched part by its returned name or full part ID."""
+    if _runtime is not None:
+        _runtime.stop(part)
+
+
+def stop_all() -> None:
+    """Stop every part and all directly queued notes."""
+    if _runtime is not None:
+        _runtime.stop_all()
+
+
+def status() -> dict:
+    """Return the shared clock, launch mode, and part states."""
+    if _runtime is None:
+        return {"beat": 0.0, "bpm": 60.0, "launchMode": "beat", "directNotes": 0,
+                "directCursor": 0.0, "pendingTempo": None, "parts": []}
+    return _runtime.status()
 
 
 def wait(beats: float) -> None:
@@ -140,5 +185,6 @@ def char2ascii(char):
 
 
 __all__ = [*PROGRAMS, *(f"set_{name}" for name in PROGRAMS), "set_drums3", "wait", "tempo", "run",
+           "start_immediate", "start_on_beat", "start_on_bar", "stop", "stop_all", "status",
            "Scale", "major_scale", "natural_minor_scale", "pentatonic_scale", "pentatonic_minor_scale",
            "drumSeq", "chipSeq", "char2ascii"]

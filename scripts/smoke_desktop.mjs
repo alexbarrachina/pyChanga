@@ -27,6 +27,13 @@ try {
   await expect(page.locator('#bpm')).toHaveValue('60');
   expect((await page.evaluate(() => window.pyChanga.command({type:'status'}))).bpm).toBe(60);
   await expect(page.locator('.part')).toHaveCount(3);
+  await page.locator('#quantization').selectOption('bar');
+  await expect.poll(async () => (await page.evaluate(() => window.pyChanga.command({type:'status'}))).launchMode).toBe('bar');
+  const modePart = await page.evaluate(() => window.pyChanga.command({type:'run',
+    documentId:'mode-smoke', filename:'mode-smoke.py', name:'test',
+    source:'# %% setup\nfrom pyChanga import *\nstart_on_beat()\n# %% test\npiano(60,.5,.1)\n'}));
+  await expect(page.locator('#quantization')).toHaveValue('beat');
+  await page.evaluate(id => window.pyChanga.command({type:'stop',partId:id}), modePart.partId);
   const findInput = page.getByRole('dialog', {name: 'Find / Replace'}).getByRole('textbox', {name: 'Find'});
   await page.locator('#find').click();
   await expect(findInput).toBeVisible();

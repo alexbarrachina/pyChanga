@@ -41,7 +41,11 @@ const functions = [...instruments.map(name => ({name, signature: '(note, vol, du
   insert: `${name}(\${1:60}, \${2:0.7}, \${3:0.5})`, description: 'Play a MIDI pitch or list of pitches. Volume: 0–1. Duration: beats. block=False overlaps notes.'})),
   {name:'wait',signature:'(beats)',insert:'wait(${1:1})',description:'Rest for beats. Other musical parts keep playing.'},
   {name:'tempo',signature:'(bpm)',insert:'tempo(${1:60})',description:'Change the shared tempo on the next available beat (20–400 BPM; starts at 60).'},
-  {name:'run',signature:'(function, *args, **kwargs)',insert:'run(${1:melody})',description:'Start an independent numbered instance of a function, such as melody1. Call from a musical part.'},
+  {name:'run',signature:'(function, *args, **kwargs)',insert:'run(${1:melody})',description:'Start an independent numbered instance of a function, such as melody1.'},
+  ...['start_immediate','start_on_beat','start_on_bar'].map(name => ({name,signature:'()',insert:`${name}()`,description:'Set the shared launch mode for subsequent parts and sections.'})),
+  {name:'stop',signature:'(part)',insert:'stop(${1:part})',description:'Stop a part by the name returned from run(), or by its full ID.'},
+  {name:'stop_all',signature:'()',insert:'stop_all()',description:'Stop all parts and directly queued notes.'},
+  {name:'status',signature:'()',insert:'status()',description:'Read the shared clock, launch mode, and part states.'},
   {name:'drumSeq',signature:'(seq, dur=0.25)',insert:'drumSeq("${1:k-h-s-h-}", ${2:0.25})',description:'k: kick, s: snare, h: hi-hat, c: cymbal, t: tom, o: open hi-hat, m: muted hi-hat, -: rest.'},
   {name:'chipSeq',signature:'(seq, dur=0.25)',insert:'chipSeq("${1:k-h-s-h-}", ${2:0.25})',description:'Chip kit: k: kick, s: snare, h: hi-hat, c: clave, t: tom, o: open hi-hat, m: muted hi-hat, -: rest.'},
   ...['major_scale','natural_minor_scale','pentatonic_scale','pentatonic_minor_scale'].map(name => ({name,signature:'(root)',insert:`${name}(\${1:60})`,description:'An octave-extending scale. Access degrees with scale[0] or a finite slice such as scale[:8].'}))];
@@ -167,7 +171,7 @@ async function run(name?: string) {
     banner(); monaco.editor.setModelMarkers(active.model, 'pyChanga', []);
     const selection = editor.getSelection()!;
     await command({type:'run', documentId:active.id, filename:active.path || active.name, source:active.model.getValue(),
-      quantization:$<HTMLSelectElement>('quantization').value, ...(name ? {name} : {selection: {
+      ...(name ? {name} : {selection: {
         startLine:selection.startLineNumber, startColumn:selection.startColumn,
         endLine:selection.endLineNumber, endColumn:selection.endColumn}})});
   } catch (error) { banner((error as Error).message); }
@@ -226,8 +230,11 @@ function onEvent(event: EngineEvent) {
   } else if (event.type==='fatal') {
     ready=false;parts=[];$('connection-dot').className='dot error';$('connection-label').textContent='Audio unavailable';
     $<HTMLButtonElement>('run').disabled=true;$<HTMLButtonElement>('stop-all').disabled=true;banner(event.message);log(event.message||'Playback stopped','error');renderParts();
+  } else if(event.type==='launch_mode') {
+    if(event.launchMode) $<HTMLSelectElement>('quantization').value=event.launchMode;
   } else if(event.type==='status') {
     parts=event.parts||[];
+    if(event.launchMode) $<HTMLSelectElement>('quantization').value=event.launchMode;
     const beat=event.beat||0;const whole=Math.floor(beat);
     $('beat-position').textContent=`${String(Math.floor(whole/4)+1).padStart(3,'0')}.${whole%4+1}`;
     document.querySelectorAll('.beat-lights i').forEach((el,index)=>el.classList.toggle('active',index===whole%4));
@@ -246,6 +253,7 @@ async function save() {try {const doc=active;const source=doc.model.getValue();c
 async function open() {try {const result=await window.pyChanga.open();if(result){const existing=[...documents.values()].find(d=>d.path===result.path);if(existing)activate(existing);else createDocument(result.path.split(/[\\/]/).pop()!,result.source,result.path,true);}}catch(error){banner((error as Error).message);}}
 function find() { editor.trigger('keyboard', 'actions.find', null); }
 $('run').onclick=()=>void run();$('stop-all').onclick=()=>void stopAll();$('save').onclick=()=>void save();$('open').onclick=()=>void open();$('find').onclick=find;
+$<HTMLSelectElement>('quantization').onchange=()=>void command({type:'launch_mode',mode:$<HTMLSelectElement>('quantization').value}).catch(error=>banner(error.message));
 $('new').onclick=()=>createDocument('untitled.py','# %% setup\nfrom pyChanga import *\n\n# %% melody\npiano(60, 0.7, 1)\n');
 $('restart').onclick=()=>{ready=false;parts=[];renderParts();$('connection-label').textContent='Restarting…';void window.pyChanga.restart().catch(e=>banner(e.message));};
 $('clear-output').onclick=()=>{$('output').replaceChildren();outputLines.clear();outputCount=0;$('output-count').textContent='0';};

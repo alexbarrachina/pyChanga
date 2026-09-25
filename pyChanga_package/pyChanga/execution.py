@@ -25,7 +25,6 @@ class LaunchPlan:
     setup: str
     parts: tuple[PartSource, ...]
     reserved_names: frozenset[str]
-    quantum: float
     grouped: bool
     request_id: str | None = None
 
@@ -55,11 +54,6 @@ def prepare_run(request: dict, *, all_parts: bool = False) -> LaunchPlan:
     else:
         parts = [PartSource(section.name, section.start_line, body)]
 
-    # A bar currently contains four beats. This is a musical rule, not a UI rule.
-    quantum = {"immediate": 0, "beat": 1, "bar": 4}.get(request.get("quantization", "beat"))
-    if quantum is None:
-        raise ValueError("Launch timing must be immediate, beat or bar")
-
     return LaunchPlan(
         source=source,
         filename=filename,
@@ -67,7 +61,6 @@ def prepare_run(request: dict, *, all_parts: bool = False) -> LaunchPlan:
         setup=document.setup,
         parts=tuple(parts),
         reserved_names=frozenset(section.name for section in document.sections),
-        quantum=quantum,
         grouped=all_parts,
         request_id=request.get("requestId"),
     )

@@ -91,7 +91,7 @@ async function stopService() {
 
 function command(value: Record<string, unknown>): Promise<any> {
   if (!service || latest?.type !== 'ready') return Promise.reject(new Error('Playback is not ready. Use Restart audio.'));
-  if (!['run', 'stop', 'stop_all', 'tempo', 'parse', 'status'].includes(String(value.type))) return Promise.reject(new Error('Unsupported command'));
+  if (!['run', 'stop', 'stop_all', 'tempo', 'parse', 'status', 'launch_mode'].includes(String(value.type))) return Promise.reject(new Error('Unsupported command'));
   const requestId = randomUUID();
   const line = JSON.stringify({...value, version: 1, requestId}) + '\n';
   if (line.length > 2_000_000) return Promise.reject(new Error('The document is too large'));

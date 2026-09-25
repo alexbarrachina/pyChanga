@@ -13,6 +13,7 @@ export interface EngineEvent {
   partId?: string; revision?: string; documentId?: string; filename?: string;
   line?: number; column?: number; traceback?: string; text?: string; stream?: string;
   parts?: MusicPart[]; beat?: number; bpm?: number;
+  launchMode?: 'beat' | 'bar' | 'immediate';
   pendingTempo?: {bpm: number; beat: number} | null;
 }
 export interface MusicBridge {
