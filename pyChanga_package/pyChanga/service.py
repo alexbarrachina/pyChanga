@@ -5,6 +5,7 @@ slow client cannot block audio scheduling. Worker output uses a separate pipe.
 """
 from __future__ import annotations
 import json
+import os
 import queue
 import sys
 import threading
@@ -16,6 +17,14 @@ from .protocol import PROTOCOL_VERSION, handle_command
 
 
 def serve(silent=False):
+    # Spawned Windows workers can inherit standard handles from the service.
+    # Keep the protocol and control pipes owned by this process alone.
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        try:
+            os.set_inheritable(stream.fileno(), False)
+        except (OSError, ValueError):
+            pass
+
     incoming = queue.Queue(maxsize=128)
     outgoing = queue.Queue(maxsize=512)
     disconnected = threading.Event()

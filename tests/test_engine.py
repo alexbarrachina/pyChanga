@@ -266,6 +266,13 @@ class EngineTests(unittest.TestCase):
         self.assertFalse(self.engine.launch_groups)
         self.assertIn('before completing setup', self.engine.parts['group::slow'].error['message'])
 
+    def test_worker_crash_before_ready_does_not_leave_part_preparing(self):
+        result = self.run_part('pass', setup='import os\nos._exit(17)')
+        part = self.engine.parts[result['partId']]
+        self.until(lambda: part.state == 'error')
+        self.assertIn('exit code 17', part.error['message'])
+        self.assertFalse(self.engine.active)
+
     def test_run_all_without_marker(self):
         request = self.group_request()
         request['source'] = request['source'].replace('# %% all\n', '')

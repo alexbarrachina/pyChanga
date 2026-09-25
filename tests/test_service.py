@@ -33,8 +33,11 @@ class ServiceTests(unittest.TestCase):
             process.stdin.flush()
             seen_output = False
             seen_response = False
+            recent = []
             for _ in range(100):
                 event = messages.get(timeout=5)
+                recent.append(event)
+                recent = recent[-8:]
                 self.assertNotEqual(event['type'], 'invalid')
                 self.assertEqual(event['version'], 1)
                 if event['type'] == 'response':
@@ -46,7 +49,7 @@ class ServiceTests(unittest.TestCase):
                 if event['type'] == 'status' and event['parts'] and event['parts'][0]['state'] == 'finished':
                     break
             else:
-                self.fail('The part did not finish')
+                self.fail(f'The part did not finish; recent events: {recent}')
             self.assertTrue(seen_output)
             self.assertTrue(seen_response)
             process.stdin.close()
@@ -55,6 +58,8 @@ class ServiceTests(unittest.TestCase):
             if process.poll() is None:
                 process.kill()
                 process.wait()
+            if not process.stdin.closed:
+                process.stdin.close()
             process.stdout.close()
             process.stderr.close()
 

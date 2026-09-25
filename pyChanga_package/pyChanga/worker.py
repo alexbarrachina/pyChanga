@@ -91,25 +91,32 @@ class Output(io.TextIOBase):
 
 
 def run_worker(connection, payload):
-    # Keep os.write(), extension modules and subprocess output off the service's
-    # JSON protocol pipe. Ordinary print() is forwarded over the private channel.
-    with open(os.devnull, "wb") as null:
-        os.dup2(null.fileno(), 1)
-        os.dup2(null.fileno(), 2)
+    filename = payload.get("filename", "<worker>")
     runtime = PartRuntime(connection)
-    api._bind(runtime)
-    sys.stdout, sys.stderr = Output(runtime, "stdout"), Output(runtime, "stderr")
-    sys.stdin = io.StringIO("")
-    filename = payload["filename"]
-    source = payload["source"]
-    linecache.cache[filename] = (len(source), None, source.splitlines(keepends=True), filename)
-    directory = Path(filename).parent
-    if directory.is_dir():
-        os.chdir(directory)
-        sys.path.insert(0, str(directory.resolve()))
-    namespace = {"__name__": "__main__", "__file__": filename, "__builtins__": __builtins__}
     phase = "setup"
     try:
+        # Keep os.write(), extension modules and subprocess output off the
+        # service's JSON protocol pipe. Ordinary print() uses the private pipe.
+        null = os.open(os.devnull, os.O_WRONLY)
+        try:
+            os.dup2(null, 1)
+            os.dup2(null, 2)
+        finally:
+            # A spawned worker may start with fd 1 or 2 closed. In that case
+            # opening the null device occupies that fd, so closing it here
+            # would undo the redirection.
+            if null not in (1, 2):
+                os.close(null)
+        api._bind(runtime)
+        sys.stdout, sys.stderr = Output(runtime, "stdout"), Output(runtime, "stderr")
+        sys.stdin = io.StringIO("")
+        source = payload["source"]
+        linecache.cache[filename] = (len(source), None, source.splitlines(keepends=True), filename)
+        directory = Path(filename).parent
+        if directory.is_dir():
+            os.chdir(directory)
+            sys.path.insert(0, str(directory.resolve()))
+        namespace = {"__name__": "__main__", "__file__": filename, "__builtins__": __builtins__}
         if "function" in payload:
             function, args, kwargs = restore_function(payload["function"])
         else:

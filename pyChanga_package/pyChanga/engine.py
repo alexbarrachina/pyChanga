@@ -551,10 +551,13 @@ class Engine:
                     continue
                 try:
                     self._tick_revision(part, revision)
-                except (EOFError, BrokenPipeError, OSError):
+                except (EOFError, BrokenPipeError, OSError) as error:
                     if not revision.done:
+                        detail = str(error)
+                        if not detail and not revision.process.is_alive():
+                            detail = f"The Python part exited unexpectedly (exit code {revision.process.exitcode})"
                         self._fail(part, revision, {
-                            "message": "The Python part exited unexpectedly",
+                            "message": detail or "The Python part exited unexpectedly",
                             "filename": revision.filename,
                             "line": part.line,
                         })
@@ -577,9 +580,6 @@ class Engine:
         part.state = "playing"
 
     def _tick_revision(self, part, revision):
-        if revision.next_cursor is not None and not revision.process.is_alive():
-            raise BrokenPipeError("The Python part exited while waiting")
-
         # Limit work per part so a talkative worker cannot starve the others.
         for _ in range(16):
             if revision.done or revision.next_cursor is not None or not revision.connection.poll():
@@ -595,6 +595,12 @@ class Engine:
             if resume_at <= now + LOOKAHEAD:
                 revision.next_cursor = None
                 self._reply(revision)
+
+        # A worker can fail before its first "ready" message (for example,
+        # during Windows spawn or stream setup). Without this check the part
+        # remains in "preparing" forever and callers wait until they time out.
+        if not revision.done and not revision.process.is_alive() and not revision.connection.poll():
+            raise BrokenPipeError(f"The Python part exited unexpectedly (exit code {revision.process.exitcode})")
 
         # Returning from Python does not end a final nonblocking note early.
         if revision.done and revision.start is not None and not revision.notes:
