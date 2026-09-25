@@ -69,19 +69,34 @@ def parse_document(source: str) -> Document:
     return Document("".join(setup_lines), tuple(parts), launcher)
 
 
-def execution(source: str, filename: str, selection: dict | None = None, name: str | None = None):
+def execution(
+    source: str,
+    filename: str,
+    selection: dict | None = None,
+    name: str | None = None,
+) -> tuple[Document, Section, str]:
+    """Select and compile a section, preserving original traceback line numbers."""
     document = parse_document(source)
     selection = selection or {"startLine": document.parts[0].start_line, "startColumn": 1,
                               "endLine": document.parts[0].start_line, "endColumn": 1}
     start, end = int(selection["startLine"]), int(selection["endLine"])
-    sc, ec = int(selection.get("startColumn", 1)), int(selection.get("endColumn", 1))
+    start_column = int(selection.get("startColumn", 1))
+    end_column = int(selection.get("endColumn", 1))
     lines = source.splitlines(keepends=True) or [""]
-    if min(start, end, sc, ec) < 1 or start > len(lines) + 1 or end > len(lines) + 1 or (end, ec) < (start, sc):
+    if (
+        min(start, end, start_column, end_column) < 1
+        or start > len(lines) + 1
+        or end > len(lines) + 1
+        or (end, end_column) < (start, start_column)
+    ):
         raise ValueError("Invalid source selection")
-    selected = (start, sc) != (end, ec)
-    effective_end = end - 1 if selected and ec == 1 and end > start else end
-    part = next((p for p in document.sections if p.name == name), None) if name is not None else next(
-        (p for p in document.sections if p.marker_line <= start <= max(p.end_line, p.start_line)), None)
+    selected = (start, start_column) != (end, end_column)
+    effective_end = end - 1 if selected and end_column == 1 and end > start else end
+    if name is not None:
+        part = next((part for part in document.sections if part.name == name), None)
+    else:
+        part = next((part for part in document.sections
+                     if part.marker_line <= start <= max(part.end_line, part.start_line)), None)
     if part is None:
         raise ValueError("Place the cursor in a musical part. Setup is replayed when you run a part.")
     if selected:
@@ -89,11 +104,11 @@ def execution(source: str, filename: str, selection: dict | None = None, name: s
             raise ValueError("Select code within one musical section")
         chunks = lines[start - 1:end]
         if start == end:
-            body = chunks[0][sc - 1:ec - 1]
+            body = chunks[0][start_column - 1:end_column - 1]
         else:
-            chunks[0] = chunks[0][sc - 1:]
+            chunks[0] = chunks[0][start_column - 1:]
             if end <= len(lines):
-                chunks[-1] = chunks[-1][:ec - 1]
+                chunks[-1] = chunks[-1][:end_column - 1]
             body = "".join(chunks)
         body = "\n" * (start - 1) + textwrap.dedent(body)
     else:

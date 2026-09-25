@@ -1,4 +1,8 @@
-"""Version 1 JSON-lines desktop protocol. Student output never uses this pipe."""
+"""Host the playback engine over standard input/output for external clients.
+
+The main thread owns the engine. Reader/writer threads only move messages, so a
+slow client cannot block audio scheduling. Worker output uses a separate pipe.
+"""
 from __future__ import annotations
 import json
 import queue
@@ -7,7 +11,8 @@ import threading
 import time
 
 from .audio import FluidSynthBackend, RecordingBackend
-from .engine import Engine
+from .engine import Engine, LOOKAHEAD
+from .protocol import PROTOCOL_VERSION, handle_command
 
 
 def serve(silent=False):
@@ -20,7 +25,7 @@ def serve(silent=False):
             outgoing.put_nowait(event)
         except queue.Full:
             if event["type"] not in ("output", "status"):
-                disconnected.set()  # A disconnected/unresponsive editor must not leave music running.
+                disconnected.set()  # Stop playback when the controlling client disconnects.
 
     def writer():
         while True:
@@ -28,7 +33,8 @@ def serve(silent=False):
             if event is None:
                 return
             try:
-                sys.stdout.write(json.dumps(event, ensure_ascii=False, allow_nan=False) + "\n")
+                message = {**event, "version": PROTOCOL_VERSION}
+                sys.stdout.write(json.dumps(message, ensure_ascii=False, allow_nan=False) + "\n")
                 sys.stdout.flush()
             except (OSError, BrokenPipeError):
                 disconnected.set()
@@ -48,26 +54,27 @@ def serve(silent=False):
                     raise ValueError("Protocol messages must be objects")
                 incoming.put(request)
             except (ValueError, json.JSONDecodeError) as error:
-                emit({"version": 1, "type": "error", "message": str(error)})
+                emit({"type": "error", "message": str(error)})
 
     writer_thread = threading.Thread(target=writer, daemon=True)
     writer_thread.start()
     try:
         backend = RecordingBackend() if silent else FluidSynthBackend()
     except Exception as error:
-        emit({"version": 1, "type": "fatal", "message": str(error)})
+        emit({"type": "fatal", "message": str(error)})
         outgoing.put(None)
         writer_thread.join(timeout=2)
         return 1
     engine = Engine(backend, emit)
     threading.Thread(target=reader, daemon=True).start()
-    emit({"version": 1, "type": "ready", "audio": "silent" if silent else "fluidsynth", "lookaheadMs": 100})
+    emit({"type": "ready", "audio": "silent" if silent else "fluidsynth", "lookaheadMs": LOOKAHEAD * 1000})
     try:
         while not disconnected.is_set() and not engine.closed:
-            # Bound editor traffic so a stream of commands cannot starve scheduling.
+            # Bound client traffic so a stream of commands cannot starve scheduling.
             for _ in range(8):
                 try:
-                    engine.command(incoming.get_nowait())
+                    response = handle_command(engine, incoming.get_nowait())
+                    emit(response)
                 except queue.Empty:
                     break
                 if engine.closed:

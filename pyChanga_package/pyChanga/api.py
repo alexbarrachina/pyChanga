@@ -8,6 +8,8 @@ from .scales import Scale, major_scale, natural_minor_scale, pentatonic_scale, p
 
 
 class Runtime(Protocol):
+    """Execution context used by musical commands; independent of any editor."""
+
     def note(self, instrument: str, pitches: list[int], volume: float, duration: float, block: bool) -> None: ...
     def wait(self, beats: float) -> None: ...
     def tempo(self, bpm: float) -> None: ...
@@ -18,6 +20,7 @@ _runtime: Runtime | None = None
 
 
 def _bind(runtime: Runtime | None) -> None:
+    """Attach this interpreter's runtime. Each worker has its own binding."""
     global _runtime
     _runtime = runtime
 
@@ -33,7 +36,7 @@ def _number(value: Real, name: str, minimum: float, maximum: float | None = None
 
 def _context() -> Runtime:
     if _runtime is None:
-        raise RuntimeError("Run your code in pyChangaIDE, or use: python -m pyChanga lesson.py")
+        raise RuntimeError("No active pyChanga runtime. Run a file with: python -m pyChanga lesson.py")
     return _runtime
 
 
@@ -66,7 +69,13 @@ def _player(instrument: str):
         if not pitches:
             raise ValueError("A chord needs at least one note")
         for pitch in pitches:
-            if isinstance(pitch, bool) or not isinstance(pitch, Real) or not isfinite(pitch) or int(pitch) != pitch or not 0 <= pitch <= 127:
+            if (
+                isinstance(pitch, bool)
+                or not isinstance(pitch, Real)
+                or not isfinite(pitch)
+                or int(pitch) != pitch
+                or not 0 <= pitch <= 127
+            ):
                 raise ValueError("Notes must be whole MIDI pitches from 0 to 127; microtonal pitches are not supported")
         volume = _number(vol, "Volume", 0, 1)
         duration = _number(dur, "Duration", 0)
@@ -101,32 +110,28 @@ def set_drums3():
 
 def drumSeq(seq: str, dur: float = 0.25) -> None:
     """Play k=kick, s=snare, h=hi-hat, c=cymbal, t=tom, o=openHat, m=mutedHat, -=rest."""
-    _number(dur, "Duration", 0)
-    if dur == 0:
-        raise ValueError("Duration must be greater than zero")
     mapping = {"k": 36, "s": 37, "h": 48, "c": 65, "t": 55, "o": 68, "m": 50}
-    if not isinstance(seq, str) or any(c not in "kshctom-" for c in seq):
-        raise ValueError("Drum sequences use only k, s, h, c, t, o, m and -")
-    for character in seq:
-        if character == "-":
-            wait(dur)
-        else:
-            drums(mapping[character], 0.7, dur)
+    _sequence(seq, dur, drums, mapping, "Drum")
 
 
 def chipSeq(seq: str, dur: float = 0.25) -> None:
     """Play k=kick, s=snare, h=hi-hat, c=clave, t=tom, o=openHat, m=mutedHat, -=rest."""
+    mapping = {"k": 60, "s": 62, "h": 63, "c": 65, "t": 64, "o": 67, "m": 66}
+    _sequence(seq, dur, chip, mapping, "Chip")
+
+
+def _sequence(seq, dur, instrument, mapping, label):
+    """Validate the complete pattern before playing its first step."""
     _number(dur, "Duration", 0)
     if dur == 0:
         raise ValueError("Duration must be greater than zero")
-    mapping = {"k": 60, "s": 62, "h": 63, "c": 65, "t": 64, "o": 67, "m": 66}
-    if not isinstance(seq, str) or any(c not in "kshctom-" for c in seq):
-        raise ValueError("Chip sequences use only k, s, h, c, t, o, m and -")
+    if not isinstance(seq, str) or any(c != "-" and c not in mapping for c in seq):
+        raise ValueError(f"{label} sequences use only k, s, h, c, t, o, m and -")
     for character in seq:
         if character == "-":
             wait(dur)
         else:
-            chip(mapping[character], 0.7, dur)
+            instrument(mapping[character], 0.7, dur)
 
 
 def char2ascii(char):

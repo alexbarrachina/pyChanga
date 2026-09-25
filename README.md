@@ -180,8 +180,8 @@ The Python package has no Python dependencies. For command-line use:
 
 ```sh
 python3 -m pip install ./pyChanga_package
-python3 -m pyChanga examples/02_variables_and_chords.py
-python3 -m pyChanga examples/01_first_composition.py --part melody
+python3 -m pyChanga examples/01_simple_arpeggio.py
+python3 -m pyChanga examples/08_multi_parts.py --part melody
 ```
 
 The CLI starts all named parts together unless `--part` selects one.
@@ -191,9 +191,13 @@ editor or this runner; a bare `python lesson.py` explains how to use the runner.
 
 ## Architecture and timing
 
-`pyChanga_package/pyChanga` contains the teaching API, canonical section parser,
-process worker, conductor, beat/time mapping, native audio adapter, and CLI.
-`desktop` contains Electron, the isolated preload bridge, and the Monaco editor.
+`pyChanga_package/pyChanga` contains the teaching API, source preparation,
+process workers, conductor, beat/time mapping, audio adapter, CLI, and optional
+communication service. It has no dependency on the editor or Electron.
+`editor` contains the browser-based Monaco editor and its host interface.
+`desktop` implements that interface with Electron, file dialogs, and Python
+service management. See the [contributor guide](ARCHITECTURE.md) for the module
+map, execution flow, and boundaries to preserve.
 
 Each part has one logical beat cursor. Blocking notes and waits advance it;
 computation does not extend musical durations. Workers are permitted to run up to

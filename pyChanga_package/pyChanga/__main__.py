@@ -1,3 +1,4 @@
+"""Command-line runner and optional service entry point for pyChanga."""
 from __future__ import annotations
 import argparse
 from pathlib import Path
@@ -6,9 +7,9 @@ import time
 
 
 def main():
-    parser = argparse.ArgumentParser(description="pyChangaIDE — ordinary Python, one shared musical clock")
+    parser = argparse.ArgumentParser(description="pyChanga — ordinary Python, one shared musical clock")
     parser.add_argument("file", nargs="?", type=Path)
-    parser.add_argument("--service", action="store_true", help="Start the editor's JSON-lines service")
+    parser.add_argument("--service", action="store_true", help="Serve playback commands over standard input/output")
     parser.add_argument("--silent", action="store_true", help="Use the recording backend without opening audio")
     parser.add_argument("--part", help="Run this named section, or all for every part together")
     parser.add_argument("--quantization", choices=["immediate", "beat", "bar"], default="beat")

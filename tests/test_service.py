@@ -25,14 +25,22 @@ class ServiceTests(unittest.TestCase):
         thread = threading.Thread(target=read, daemon=True)
         thread.start()
         try:
-            self.assertEqual(messages.get(timeout=5)['type'], 'ready')
+            ready = messages.get(timeout=5)
+            self.assertEqual(ready['type'], 'ready')
+            self.assertEqual(ready['version'], 1)
             source = 'from pyChanga import *\nimport os\nos.write(1, b"not protocol\\n")\nprint("hello")\npiano(60, 0.5, 0.1)\n'
             process.stdin.write(json.dumps({'version':1,'type':'run','requestId':'one','source':source,'quantization':'immediate'})+'\n')
             process.stdin.flush()
             seen_output = False
+            seen_response = False
             for _ in range(100):
                 event = messages.get(timeout=5)
                 self.assertNotEqual(event['type'], 'invalid')
+                self.assertEqual(event['version'], 1)
+                if event['type'] == 'response':
+                    self.assertEqual(event['requestId'], 'one')
+                    self.assertTrue(event['ok'])
+                    seen_response = True
                 if event['type'] == 'output' and 'hello' in event['text']:
                     seen_output = True
                 if event['type'] == 'status' and event['parts'] and event['parts'][0]['state'] == 'finished':
@@ -40,6 +48,7 @@ class ServiceTests(unittest.TestCase):
             else:
                 self.fail('The part did not finish')
             self.assertTrue(seen_output)
+            self.assertTrue(seen_response)
             process.stdin.close()
             self.assertEqual(process.wait(timeout=5), 0)
         finally:

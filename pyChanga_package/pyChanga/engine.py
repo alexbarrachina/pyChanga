@@ -7,19 +7,23 @@ import time
 import uuid
 
 from .audio import RecordingBackend
-from .sections import execution, parse_document
+from .errors import error_info
+from .execution import LaunchPlan, PartSource, prepare_run
 from .transport import Transport
-from .worker import error_info, run_worker
+from .worker import run_worker
 
 LOOKAHEAD = 0.100
 GUARD = 0.030
 LATE_TOLERANCE = 0.020
 MAX_NOTES = 1024
 MAX_PARTS = 32
+MAX_REMEMBERED_PARTS = 128
 
 
 @dataclass
 class Note:
+    """One note, with start/end positions in absolute beats."""
+
     identity: str
     owner: str
     instrument: str
@@ -33,6 +37,8 @@ class Note:
 
 @dataclass
 class Revision:
+    """One execution of a part; replacements prepare before taking over."""
+
     identity: str
     part_id: str
     process: object
@@ -41,6 +47,7 @@ class Revision:
     filename: str
     request_id: str | None
     source: str = ""
+    reserved_names: frozenset[str] = frozenset()
     earliest_beat: float | None = None
     group: str | None = None
     ready: bool = False
@@ -59,6 +66,8 @@ class Revision:
 
 @dataclass
 class Part:
+    """A named part can have a playing revision and a prepared replacement."""
+
     identity: str
     name: str
     document_id: str
@@ -72,6 +81,12 @@ class Part:
 
 
 class Engine:
+    """Own the workers, shared clock and note queue on one controlling thread.
+
+    Call tick() regularly from a runner. No editor, event loop or audio device is
+    created implicitly; callers supply the backend and event callback.
+    """
+
     def __init__(self, backend=None, emit=None):
         self.backend = backend or RecordingBackend()
         self.transport = Transport(self.backend.now())
@@ -84,83 +99,103 @@ class Engine:
         self.closed = False
 
     def event(self, kind, **fields):
-        self.emit({"version": 1, "type": kind, **fields})
+        self.emit({"type": kind, **fields})
 
     def run(self, request):
-        return self._run(request)
+        """Prepare and launch one source selection, or its # %% all launcher."""
+        return self.start(prepare_run(request))
 
     def run_all(self, request):
-        return self._run(request, all_parts=True)
+        """Prepare and launch every musical section at a common boundary."""
+        return self.start(prepare_run(request, all_parts=True))
 
-    def _run(self, request, all_parts=False):
-        source = request["source"]
-        if not isinstance(source, str) or len(source.encode("utf-8")) > 1_000_000:
-            raise ValueError("A document must contain at most 1 MB of Python source")
-        filename = request.get("filename") or "untitled.py"
-        if all_parts:
-            document = parse_document(source)
-        else:
-            document, section, body = execution(source, filename, request.get("selection"), request.get("name"))
-            all_parts = section.name == "all"
-        # Compile every part before changing any currently playing revision.
-        if all_parts:
-            sections = [execution(source, filename, name=p.name)[1:] for p in document.parts]
-        else:
-            sections = [(section, body)]
-        document_id = str(request.get("documentId", filename))
-        quantum = {"immediate": 0, "beat": 1, "bar": 4}.get(request.get("quantization", "beat"))
-        if quantum is None:
-            raise ValueError("Launch timing must be immediate, beat or bar")
-        active = {p.identity for p in self.parts.values() if p.current or p.pending}
-        requested = {f"{document_id}::{section.name}" for section, _ in sections}
+    def start(self, plan: LaunchPlan):
+        """Launch validated source. Parsing and compilation have already finished."""
+        active = {part.identity for part in self.parts.values() if part.current or part.pending}
+        requested = {f"{plan.document_id}::{part.name}" for part in plan.parts}
         if len(active | requested) > MAX_PARTS:
             raise ValueError(f"At most {MAX_PARTS} musical parts can run at once")
-        grouped = all_parts
-        group = uuid.uuid4().hex if grouped else None
+
+        group = uuid.uuid4().hex if plan.grouped else None
         if group:
             self.launch_groups[group] = []
         results = []
         try:
-            for section, body in sections:
-                result = self._prepare(request, document, section, body, filename, document_id, quantum, group)
-                results.append(result)
+            for part_source in plan.parts:
+                results.append(self._prepare(plan, part_source, group))
         except BaseException:
             if group:
                 self._cancel_group(group)
             raise
         self.status(force=True)
-        return {"parts": results} if grouped else results[0]
+        return {"parts": results} if plan.grouped else results[0]
 
-    def _prepare(self, request, document, section, body, filename, document_id, quantum, group):
-        identity = f"{document_id}::{section.name}"
-        part = self.parts.get(identity)
-        if part is None:
-            if len(self.parts) >= 128:
-                oldest = next((key for key, p in self.parts.items() if not (p.current or p.pending)), None)
-                if oldest:
-                    del self.parts[oldest]
-            part = Part(identity, section.name, document_id, filename, section.start_line)
-            self.parts[identity] = part
-        self._cancel_pending(part)
-        part.filename, part.line, part.error = filename, section.start_line, None
+    def _remember_part(self, part: Part) -> None:
+        """Bound the status history without discarding any active parts."""
+        if len(self.parts) >= MAX_REMEMBERED_PARTS:
+            for identity, previous in self.parts.items():
+                if previous.current is None and previous.pending is None:
+                    del self.parts[identity]
+                    break
+        self.parts[part.identity] = part
+
+    def _spawn_revision(self, part, payload, quantum, request_id, *,
+                        reserved_names, group=None, earliest_beat=None):
+        """Create one worker and always close the parent's copy of its pipe."""
         parent, child = self.context.Pipe()
-        revision_id = uuid.uuid4().hex
-        payload = {"source": request["source"], "filename": filename, "setup": document.setup, "body": body}
-        process = self.context.Process(target=run_worker, args=(child, payload), name=f"pyChanga: {section.name}", daemon=True)
-        revision = Revision(revision_id, identity, process, parent, quantum, filename, request.get("requestId"),
-                            source=request["source"], group=group)
+        process = self.context.Process(
+            target=run_worker,
+            args=(child, payload),
+            name=f"pyChanga: {part.name}",
+            daemon=True,
+        )
+        revision = Revision(
+            identity=uuid.uuid4().hex,
+            part_id=part.identity,
+            process=process,
+            connection=parent,
+            quantum=quantum,
+            filename=payload["filename"],
+            request_id=request_id,
+            source=payload["source"],
+            reserved_names=reserved_names,
+            group=group,
+            earliest_beat=earliest_beat,
+        )
         try:
             process.start()
         except BaseException:
             parent.close()
-            child.close()
             raise
-        child.close()
+        finally:
+            child.close()
+        return revision
+
+    def _prepare(self, plan: LaunchPlan, source: PartSource, group):
+        identity = f"{plan.document_id}::{source.name}"
+        part = self.parts.get(identity)
+        if part is None:
+            part = Part(identity, source.name, plan.document_id, plan.filename, source.line)
+            self._remember_part(part)
+        self._cancel_pending(part)
+        part.filename = plan.filename
+        part.line = source.line
+        part.error = None
+        payload = {
+            "source": plan.source,
+            "filename": plan.filename,
+            "setup": plan.setup,
+            "body": source.body,
+        }
+        revision = self._spawn_revision(
+            part, payload, plan.quantum, plan.request_id,
+            reserved_names=plan.reserved_names, group=group,
+        )
         part.pending = revision
         if group:
             self.launch_groups[group].append(revision)
         part.state = "playing" if part.current else "preparing"
-        return {"partId": identity, "revision": revision_id, "name": section.name}
+        return {"partId": identity, "revision": revision.identity, "name": part.name}
 
     def set_tempo(self, bpm, earliest_beat=None):
         if isinstance(bpm, bool) or not isinstance(bpm, (int, float)) or not math.isfinite(bpm) or not 20 <= bpm <= 400:
@@ -171,39 +206,6 @@ class Engine:
         self.transport.set_tempo(bpm, beat)
         self.event("tempo", bpm=bpm, effectiveBeat=beat)
         return {"bpm": bpm, "effectiveBeat": beat}
-
-    def command(self, request):
-        request_id = request.get("requestId")
-        try:
-            if request.get("version") != 1:
-                raise ValueError("Unsupported protocol version; expected version 1")
-            kind = request.get("type")
-            if kind == "run":
-                result = self.run(request)
-            elif kind == "stop":
-                self.stop(request["partId"])
-                result = {}
-            elif kind == "stop_all":
-                self.stop_all()
-                result = {}
-            elif kind == "tempo":
-                result = self.set_tempo(request["bpm"])
-            elif kind == "parse":
-                document = parse_document(request["source"])
-                result = {"parts": [{"name": p.name, "line": p.start_line, "markerLine": p.marker_line,
-                                      "endLine": p.end_line, "kind": "all" if p.name == "all" else "part"}
-                                     for p in document.sections]}
-            elif kind == "status":
-                result = self.snapshot()
-            elif kind == "shutdown":
-                self.close()
-                result = {}
-            else:
-                raise ValueError(f"Unknown command: {kind}")
-            self.event("response", requestId=request_id, ok=True, result=result)
-        except Exception as error:
-            self.event("response", requestId=request_id, ok=False,
-                       error=error_info(error, request.get("filename", "untitled.py")))
 
     def _reply(self, revision):
         try:
@@ -303,36 +305,26 @@ class Engine:
             blob = message["function"]
             if not isinstance(blob, bytes) or len(blob) > 1_000_000:
                 raise ValueError("A launched function and its arguments must fit within 1 MB")
-            reserved = {section.name for section in parse_document(revision.source).sections}
             index = 1
             while True:
                 name = f"{base}{index}"
                 identity = f"{part.document_id}::function::{name}"
                 existing = self.parts.get(identity)
-                if name not in reserved and not (existing and (existing.current or existing.pending)):
+                if name not in revision.reserved_names and not (existing and (existing.current or existing.pending)):
                     break
                 index += 1
             if existing is None:
-                if len(self.parts) >= 128:
-                    oldest = next((key for key, p in self.parts.items() if not (p.current or p.pending)), None)
-                    if oldest:
-                        del self.parts[oldest]
                 existing = Part(identity, name, part.document_id, revision.filename, message["line"], origin="function")
-                self.parts[identity] = existing
-            existing.filename, existing.line, existing.error = revision.filename, message["line"], None
-            parent, child = self.context.Pipe()
+                self._remember_part(existing)
+            existing.filename = revision.filename
+            existing.line = message["line"]
+            existing.error = None
             payload = {"source": revision.source, "filename": revision.filename, "function": blob}
-            process = self.context.Process(target=run_worker, args=(child, payload), name=f"pyChanga: {name}", daemon=True)
-            launched = Revision(uuid.uuid4().hex, identity, process, parent, revision.quantum, revision.filename,
-                                revision.request_id, source=revision.source,
-                                earliest_beat=revision.start + message["cursor"])
-            try:
-                process.start()
-            except BaseException:
-                parent.close()
-                child.close()
-                raise
-            child.close()
+            launched = self._spawn_revision(
+                existing, payload, revision.quantum, revision.request_id,
+                reserved_names=revision.reserved_names,
+                earliest_beat=revision.start + message["cursor"],
+            )
             existing.pending = launched
             existing.state = "preparing"
             revision.connection.send({"type": "continue", "name": name})
@@ -427,50 +419,81 @@ class Engine:
                 del revision.notes[identity]
 
     def tick(self):
+        """Advance playback without waiting for any individual worker."""
         if self.closed:
             return
         for part in list(self.parts.values()):
-            now = self.backend.now()
-            if part.pending and part.pending.start is not None and self.transport.time_at(part.pending.start) <= now:
-                if part.current:
-                    self._terminate(part.current)
-                part.current, part.pending = part.pending, None
-                part.state = "playing"
+            self._activate_pending(part)
             for revision in (part.current, part.pending):
                 if revision is None:
                     continue
                 try:
-                    if revision.next_cursor is not None and not revision.process.is_alive():
-                        raise BrokenPipeError("The Python part exited while waiting")
-                    for _ in range(16):
-                        if revision.done or revision.next_cursor is not None or not revision.connection.poll():
-                            break
-                        self._message(part, revision, revision.connection.recv())
-                        if revision is not part.current and revision is not part.pending:
-                            break
-                    if revision is not part.current and revision is not part.pending:
-                        continue
-                    now = self.backend.now()
-                    self._schedule(part, revision, now)
-                    if revision.next_cursor is not None and self.transport.time_at(revision.next_cursor) <= now + LOOKAHEAD:
-                        revision.next_cursor = None
-                        self._reply(revision)
-                    if revision.done and revision.start is not None and not revision.notes and self.transport.time_at(revision.start + revision.cursor) <= now:
-                        self._terminate(revision, immediate=False)
-                        if part.current is revision:
-                            part.current = None
-                        if part.pending is revision:
-                            part.pending = None
-                            if part.current:
-                                self._restore(part.current)
-                        part.state = "playing" if part.current else "preparing" if part.pending else "finished"
-                except (EOFError, BrokenPipeError, OSError) as error:
+                    self._tick_revision(part, revision)
+                except (EOFError, BrokenPipeError, OSError):
                     if not revision.done:
-                        self._fail(part, revision, {"message": "The Python part exited unexpectedly", "filename": revision.filename, "line": part.line})
+                        self._fail(part, revision, {
+                            "message": "The Python part exited unexpectedly",
+                            "filename": revision.filename,
+                            "line": part.line,
+                        })
                 except Exception as error:
                     self._fail(part, revision, error_info(error, revision.filename))
         self._reap()
         self.status()
+
+    def _activate_pending(self, part):
+        """Replace the old revision only when the scheduled boundary arrives."""
+        pending = part.pending
+        if pending is None or pending.start is None:
+            return
+        if self.transport.time_at(pending.start) > self.backend.now():
+            return
+        if part.current:
+            self._terminate(part.current)
+        part.current = pending
+        part.pending = None
+        part.state = "playing"
+
+    def _tick_revision(self, part, revision):
+        if revision.next_cursor is not None and not revision.process.is_alive():
+            raise BrokenPipeError("The Python part exited while waiting")
+
+        # Limit work per part so a talkative worker cannot starve the others.
+        for _ in range(16):
+            if revision.done or revision.next_cursor is not None or not revision.connection.poll():
+                break
+            self._message(part, revision, revision.connection.recv())
+            if revision is not part.current and revision is not part.pending:
+                return  # A worker error may have cancelled this revision or its group.
+
+        now = self.backend.now()
+        self._schedule(part, revision, now)
+        if revision.next_cursor is not None:
+            resume_at = self.transport.time_at(revision.next_cursor)
+            if resume_at <= now + LOOKAHEAD:
+                revision.next_cursor = None
+                self._reply(revision)
+
+        # Returning from Python does not end a final nonblocking note early.
+        if revision.done and revision.start is not None and not revision.notes:
+            finish_at = self.transport.time_at(revision.start + revision.cursor)
+            if finish_at <= now:
+                self._finish_revision(part, revision)
+
+    def _finish_revision(self, part, revision):
+        self._terminate(revision, immediate=False)
+        if part.current is revision:
+            part.current = None
+        if part.pending is revision:
+            part.pending = None
+            if part.current:
+                self._restore(part.current)
+        if part.current:
+            part.state = "playing"
+        elif part.pending:
+            part.state = "preparing"
+        else:
+            part.state = "finished"
 
     def _reap(self):
         remaining = []

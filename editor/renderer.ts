@@ -2,7 +2,7 @@ import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 import 'monaco-editor/esm/vs/basic-languages/python/python.contribution';
 import 'monaco-editor/esm/vs/editor/contrib/find/browser/findController';
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
-import type { EngineEvent, MusicPart, Section } from './types';
+import type { EngineEvent, MusicPart, Section } from './bridge';
 import './style.css';
 
 (self as any).MonacoEnvironment = {getWorker: () => new EditorWorker()};

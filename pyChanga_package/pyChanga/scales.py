@@ -16,8 +16,9 @@ class Scale:
         if isinstance(degree, slice):
             if degree.stop is None:
                 raise ValueError("A scale slice needs an end, for example scale[:8]")
-            return [self[i] for i in range(0 if degree.start is None else degree.start,
-                                          degree.stop, 1 if degree.step is None else degree.step)]
+            start = 0 if degree.start is None else degree.start
+            step = 1 if degree.step is None else degree.step
+            return [self[index] for index in range(start, degree.stop, step)]
         if not isinstance(degree, Integral):
             raise TypeError("Scale degrees must be integers")
         octave, index = divmod(degree, len(self.intervals))

@@ -175,11 +175,8 @@ class EngineTests(unittest.TestCase):
         self.assertFalse(self.engine.launch_groups)
         self.assertIn('before completing setup', self.engine.parts['group::slow'].error['message'])
 
-    def test_run_all_without_marker_and_parse_exposes_launcher(self):
+    def test_run_all_without_marker(self):
         request = self.group_request()
-        self.engine.command({'version': 1, 'type': 'parse', 'source': request['source']})
-        parsed = self.events[-1]['result']['parts']
-        self.assertEqual([(p['name'], p['kind']) for p in parsed], [('fast', 'part'), ('slow', 'part'), ('all', 'all')])
         request['source'] = request['source'].replace('# %% all\n', '')
         self.engine.run_all(request)
         self.until(lambda: len([e for e in self.events if e['type'] == 'scheduled']) == 2)
@@ -218,6 +215,18 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(len(launches), 2)
         self.assertGreater(launches[1]['beat'], launches[0]['beat'] + .4)
         self.until(lambda: any(e['type'] == 'on' and e['pitch'] == 67 for e in self.backend.events))
+
+    def test_function_names_respect_source_sections_in_nested_launches(self):
+        request = self.controller_request(
+            'run(parent)',
+            setup='def notes():\n    piano(60, .5, .1)\ndef parent():\n    run(notes)',
+        )
+        request['source'] += '# %% notes1\npass\n'
+        self.engine.run(request)
+        self.until(lambda: 'song::function::notes2' in self.engine.parts)
+        self.assertNotIn('song::function::notes1', self.engine.parts)
+        self.until(lambda: not self.engine.active)
+        self.assertTrue(any(event['type'] == 'on' for event in self.backend.events))
 
     def test_run_instances_have_independent_default_random_streams(self):
         for setup in [

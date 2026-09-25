@@ -1,3 +1,5 @@
+// The browser editor's host contract. Electron implements it in desktop/preload.ts.
+// Keep this file free of Electron/Node imports so other hosts can use the editor.
 export interface Selection { startLine: number; startColumn: number; endLine: number; endColumn: number }
 export interface MusicError { message: string; filename?: string; line?: number; column?: number; traceback?: string }
 export interface MusicPart {

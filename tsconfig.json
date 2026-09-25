@@ -5,5 +5,5 @@
     "esModuleInterop": true, "skipLibCheck": true, "noEmit": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["desktop/**/*.ts"]
+  "include": ["desktop/**/*.ts", "editor/**/*.ts"]
 }

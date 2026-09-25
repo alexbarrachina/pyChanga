@@ -52,7 +52,7 @@ class AudioStartupTests(unittest.TestCase):
 
     def test_no_working_driver_reports_failure_and_closes_devices(self):
         self.working.clear()
-        with self.assertRaisesRegex(AudioError, 'Restart audio'):
+        with self.assertRaisesRegex(AudioError, 'restart playback'):
             self.audio._start_audio_driver(None)
         self.assertIsNone(self.audio.driver)
         self.assertEqual(self.audio.delete_fluid_audio_driver.call_count, 2)

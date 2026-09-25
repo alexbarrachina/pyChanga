@@ -117,7 +117,7 @@ class FluidSynthBackend:
                     return
             self.delete_fluid_audio_driver(self.driver)
             self.driver = None
-        raise AudioError("Could not start audio playback. Check your system audio output, then use Restart audio.")
+        raise AudioError("Could not start audio playback. Check your system audio output and restart playback.")
 
     @staticmethod
     def _load_library(explicit):
@@ -136,7 +136,7 @@ class FluidSynthBackend:
                 return C.CDLL(name)
             except OSError as error:
                 errors.append(str(error))
-        raise AudioError("FluidSynth is not installed. Use the packaged pyChangaIDE app, or install FluidSynth for development.\n" + "\n".join(errors)[-1500:])
+        raise AudioError("FluidSynth could not be loaded. Install its native library or set PYCHANGA_FLUIDSYNTH to its path.\n" + "\n".join(errors)[-1500:])
 
     def _bindings(self):
         ptr, integer, uint, short, text = C.c_void_p, C.c_int, C.c_uint, C.c_short, C.c_char_p

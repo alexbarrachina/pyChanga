@@ -9,5 +9,5 @@ export async function buildMain() {
 }
 if (path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   await buildMain();
-  await viteBuild({root: 'desktop', base: './', build: {outDir: path.resolve('dist/renderer'), emptyOutDir: true}});
+  await viteBuild({root: 'editor', base: './', build: {outDir: path.resolve('dist/renderer'), emptyOutDir: true}});
 }

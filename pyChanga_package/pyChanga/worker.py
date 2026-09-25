@@ -6,10 +6,10 @@ import os
 from pathlib import Path
 import random
 import sys
-import traceback
 
 from . import api
 from ._vendor import cloudpickle
+from .errors import error_info
 
 
 class PartRuntime:
@@ -85,15 +85,6 @@ class Output(io.TextIOBase):
 
     def flush(self):
         pass
-
-
-def error_info(error, filename):
-    frames = traceback.extract_tb(error.__traceback__)
-    frame = next((f for f in reversed(frames) if f.filename == filename), None)
-    return {"message": f"{type(error).__name__}: {error}", "filename": filename,
-            "line": getattr(error, "lineno", None) or (frame.lineno if frame else 1),
-            "column": getattr(error, "offset", None) or 1,
-            "traceback": "".join(traceback.format_exception(error))[-16000:]}
 
 
 def run_worker(connection, payload):

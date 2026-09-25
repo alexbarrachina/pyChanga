@@ -33,6 +33,13 @@ class BoundedRuntime:
 
 class LessonTests(unittest.TestCase):
     def test_examples_and_migrated_parts_execute_with_new_api(self):
+        maintained_examples = [
+            '01_simple_arpeggio.py',
+            '02_sequence_blocking.py',
+            '03_conditions_and_drums.py',
+            '04_slicing_from_a_list.py',
+            '05_zip_the_simsons.py',
+        ]
         course_lessons = [
             '4 functions/4 functions and parts.py',
             '5 list operations/1 EXERCISE remix with slices.py',
@@ -41,10 +48,10 @@ class LessonTests(unittest.TestCase):
             '5 list operations/5b nectar2.py',
             '5 list operations/drumSeq & choice.py',
         ]
-        # Check the maintained numbered examples; the folder can also contain
-        # personal sketches that intentionally use older or incomplete syntax.
-        paths = sorted((ROOT / 'examples').glob('0[1-7]_*.py')) + [ROOT / 'curs' / name for name in course_lessons]
-        self.assertGreaterEqual(len(paths), 13)
+        # Name the maintained fixtures explicitly: missing lessons must fail, and
+        # personal sketches in examples/ should not silently become test inputs.
+        paths = [ROOT / 'examples' / name for name in maintained_examples]
+        paths += [ROOT / 'curs' / name for name in course_lessons]
         for path in paths:
             source = path.read_text()
             document = parse_document(source)

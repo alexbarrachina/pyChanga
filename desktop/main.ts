@@ -3,7 +3,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { EngineEvent } from './types';
+import type { EngineEvent } from '../editor/bridge';
 
 let window: BrowserWindow | null = null;
 let service: ChildProcessWithoutNullStreams | null = null;

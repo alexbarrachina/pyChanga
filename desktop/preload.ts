@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { EngineEvent, MusicBridge } from './types';
+import type { EngineEvent, MusicBridge } from '../editor/bridge';
 
 const api: MusicBridge = {
   command: command => ipcRenderer.invoke('music:command', command),
