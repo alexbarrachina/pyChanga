@@ -9,6 +9,9 @@ description = "A small Python music API with synchronized, independent live part
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+sampler = ["pyo>=1.0.5,<1.1"]
+
 [project.scripts]
 pyChanga = "pyChanga.__main__:main"
 

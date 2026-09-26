@@ -31,6 +31,9 @@ Read these files in the order of the behavior you want to change:
 | `worker.py` | One part's Python execution, local beat cursor, and requests to the engine |
 | `transport.py` | Conversion between beats and playback seconds, including tempo changes |
 | `audio.py` | FluidSynth adapter and the silent recording backend used in tests |
+| `samples.py` | Serializable sample handles, PCM WAV validation, beat-based envelopes |
+| `sampler.py` | Lazy sampler process, bounded command queues and silent sampler |
+| `pyo_audio.py` | Pyo tables, per-voice native DSP graphs and audio lifecycle |
 | `errors.py` | Source locations and tracebacks, without UI formatting |
 | `protocol.py` | External command validation, dispatch, and response objects |
 | `service.py` | Standard-input/output communication and the engine's service loop |
@@ -71,6 +74,27 @@ The engine also owns the persistent launch mode. Worker setup instructions are
 applied before choosing a section boundary; a grouped launch applies setup
 changes in document order and gives every member one boundary. The editor
 selector reads and writes this package setting.
+
+Sampler calls use the same transport and ownership rules. `load_sample()` reads
+a small WAV header, makes its length available in milliseconds when unpacked,
+and sends a portable handle to the conductor. The conductor
+starts one sampler process lazily, which alone imports Pyo, opens its native
+output stream and caches tables. Loading is acknowledged asynchronously, so the
+conductor continues to schedule other parts. Musical workers never own Pyo
+objects. Both API entry points and the external protocol validate sample requests.
+
+The sampler uses separate native audio output from FluidSynth. Commands translate
+the FluidSynth clock to host monotonic deadlines; each voice uses Pyo's native
+ramps and table reader. The streams share musical timing but are not sample-locked.
+Tempo changes rebuild envelope breakpoints, preserving the file-reading rate.
+No Python code runs in either native audio callback. Samples share the existing
+note queues so stop, replacement and draining follow the same lifecycle.
+
+The base package has no Pyo dependency. The `sampler` extra installs Pyo for
+standalone users; the IDE downloads checksum-pinned wheels during runtime
+preparation and verifies the native extension before packaging. Base tests run
+without Pyo. The IDE build also runs `test_native_sampler.py` using its embedded
+Python and `PYCHANGA_REQUIRE_PYO=1`, making missing sampler binaries a build error.
 
 ## Rules to preserve when changing playback
 

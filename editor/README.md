@@ -5,7 +5,7 @@ The browser editor in this directory provides a live-coding interface for the
 Electron window, file dialogs, settings, and a Python playback service. The
 editor's [host contract](bridge.ts) contains browser-safe types; the desktop
 [preload bridge](../desktop/preload.ts) implements it. Music, timing, workers, and
-FluidSynth remain in the Python package.
+FluidSynth and the optional Pyo sampler remain in the Python package.
 
 ## Work in the editor
 
@@ -60,14 +60,16 @@ npm run dev
 ```
 
 The development command serves `editor/` in a browser process and opens the
-Electron desktop host. Set `PYCHANGA_PYTHON` to choose the development Python
-interpreter. Set `PYCHANGA_NATIVE_DIR` to the prepared runtime's `native`
+Electron desktop host. Development uses the prepared runtime when present,
+including Pyo. Set `PYCHANGA_PYTHON` to choose another development Python
+interpreter (install Pyo into that environment to sample). Set `PYCHANGA_NATIVE_DIR` to the prepared runtime's `native`
 directory if using its FluidSynth libraries. `PYCHANGA_SILENT=1` explicitly
 selects a silent test backend; audio failures do not silently switch to it.
 
 `prepare_runtime.py` downloads checksum-verified Python and bundles the local
 soundfont, recording its SHA-256 hash. It also prepares native FluidSynth
-libraries. The soundfont is already in the repository and needs no separate
+libraries and pinned Pyo wheels with their native dependencies. It verifies the
+Pyo extension with an offline audio check. The soundfont is already in the repository and needs no separate
 download. Preparing the runtime needs internet access; the resulting app runs
 offline.
 
@@ -91,7 +93,7 @@ without system Python on the search path, set `PYCHANGA_TEST_APP` to the app's
 executable.
 
 The packaged runtime lives outside the application archive and includes CPython,
-its standard library, pyChanga, FluidSynth and its dependent libraries, the
+its standard library, pyChanga, FluidSynth, Pyo and their dependent libraries, the
 soundfont, licenses, and a version/hash manifest. The Mac DMG contains the app
 and an Applications shortcut. Windows builds produce a Squirrel installer and
 a ZIP. Build each target on its own operating system and architecture. Configured

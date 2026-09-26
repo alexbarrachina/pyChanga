@@ -2,9 +2,38 @@
   "python": {
     "version": "3.13.15",
     "release": "20260901",
-    "darwin-arm64": {"asset": "cpython-3.13.15+20260901-aarch64-apple-darwin-install_only.tar.gz", "sha256": "b9054a9d3d54f4cb5573d44907fddb29874b08909bde73f29f2868cf872223ee"},
-    "darwin-x64": {"asset": "cpython-3.13.15+20260901-x86_64-apple-darwin-install_only.tar.gz", "sha256": "49f0d97f506b855eed60b74a8ac138595c5b39799a6aa5e0d7ca8abe1019a4d4"},
-    "win32-x64": {"asset": "cpython-3.13.15+20260901-x86_64-pc-windows-msvc-install_only.tar.gz", "sha256": "9bcc038a0bf180612ed56dec93d4977d035e80b8d9320ef51a38c287baf134b7"}
+    "darwin-arm64": {
+      "asset": "cpython-3.13.15+20260901-aarch64-apple-darwin-install_only.tar.gz",
+      "sha256": "b9054a9d3d54f4cb5573d44907fddb29874b08909bde73f29f2868cf872223ee"
+    },
+    "darwin-x64": {
+      "asset": "cpython-3.13.15+20260901-x86_64-apple-darwin-install_only.tar.gz",
+      "sha256": "49f0d97f506b855eed60b74a8ac138595c5b39799a6aa5e0d7ca8abe1019a4d4"
+    },
+    "win32-x64": {
+      "asset": "cpython-3.13.15+20260901-x86_64-pc-windows-msvc-install_only.tar.gz",
+      "sha256": "9bcc038a0bf180612ed56dec93d4977d035e80b8d9320ef51a38c287baf134b7"
+    }
   },
-  "fluidsynthWindows": {"version": "2.6.1", "asset": "fluidsynth-v2.6.1-win10-x64-cpp11.zip", "sha256": "fab7a2e4b85675b66970f97a39bbc239729c5e0f237198b5922a6a73cbc8677c"}
+  "fluidsynthWindows": {
+    "version": "2.6.1",
+    "asset": "fluidsynth-v2.6.1-win10-x64-cpp11.zip",
+    "sha256": "fab7a2e4b85675b66970f97a39bbc239729c5e0f237198b5922a6a73cbc8677c"
+  },
+  "pyo": {
+    "version": "1.0.6",
+    "source": "https://github.com/belangeo/pyo/tree/1.0.6",
+    "darwin-arm64": {
+      "url": "https://test-files.pythonhosted.org/packages/88/35/0eb57827c9b58016f82f487d16af30a9385cc4a82f115340f45d54bcceda/pyo-1.0.6-cp313-cp313-macosx_13_0_arm64.whl",
+      "sha256": "38afdc65bba99d4d9b04251337287f1ca7a446a08d503ec3a64ddcf39525b226"
+    },
+    "darwin-x64": {
+      "url": "https://test-files.pythonhosted.org/packages/22/1e/b1c0860fd511131f02fa35becdc76b396dc5c5adaac54a76801a8e908e87/pyo-1.0.6-cp313-cp313-macosx_12_0_x86_64.whl",
+      "sha256": "1adc5eda25c35c4085b18c90c0257b7c69d0a95a382c096159fae04de0743198"
+    },
+    "win32-x64": {
+      "url": "https://test-files.pythonhosted.org/packages/a4/1a/dad111629e6bf36ae6def4a796caa9fc3620e00bd9e9b1f4886237bd0f0a/pyo-1.0.6-cp313-cp313-win_amd64.whl",
+      "sha256": "7e354505a29e922703f3e5e7e1aad5225d02b385fa9fe203df4913bd349a9e86"
+    }
+  }
 }

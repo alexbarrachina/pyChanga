@@ -21,10 +21,85 @@ python3 -m pip install ./pyChanga_package
 python3 -m pyChanga examples/01_simple_arpeggio.py
 ```
 
-The package has no third-party Python dependencies. Its soundfont is included in
+The base package has no third-party Python dependencies. Its soundfont is included in
 the installation. If FluidSynth is unavailable, playback reports an error rather
 than silently playing nothing. `PYCHANGA_FLUIDSYNTH` can point to a native
 FluidSynth library; `PYCHANGA_NATIVE_DIR` can point to a directory containing it.
+
+### Optional sampler
+
+The IDE includes the Pyo sampler. Standalone FluidSynth users need no additional
+installation: importing pyChanga and playing instruments never imports Pyo.
+To add the sampler to a standalone environment, install the optional extra:
+
+```sh
+python3 -m pip install './pyChanga_package[sampler]'
+# For a published package: python3 -m pip install 'pyChanga[sampler]'
+```
+
+Pyo contains native code. Its public PyPI 1.0.5 wheels support Python 3.11 on
+macOS, Windows and Linux x64; other combinations may require a source build.
+For Python 3.12 or 3.13, install the maintainer's Pyo 1.0.6 build first, then the
+extra above:
+
+```sh
+python3 -m pip install --index-url https://test.pypi.org/simple/ --no-deps pyo==1.0.6
+```
+
+The IDE pins platform-specific 1.0.6 wheels and checksums and includes their
+native libraries. No user download is required. Python 3.14 sampler binaries
+are not bundled or tested; use a supported Python for standalone sampling.
+See [Pyo installation](https://belangeo.github.io/pyo/download.html) and the
+[maintainer's 1.0.6 announcement](https://github.com/belangeo/pyo/discussions/293).
+wxPython and Pyo's GUI are not needed.
+
+```python
+from pyChanga import *
+
+voice, length_ms = load_sample("voice.wav")
+sampl(voice, 0.7, 1, start=0.5, rate=0.8, env=[0, 1, 0])
+sampl(voice, 0.7, 1, rate=-1)  # Begin at the last frame and play backward.
+sampl(voice, 0.5, 0.25, block=False)
+wait(0.1)  # Overlap the next voice.
+sampl(voice, 0.5, 0.25)
+```
+
+`load_sample(path)` loads an uncompressed PCM WAV with one or two channels.
+Relative paths are resolved beside a saved script/composition, or against the
+current directory in the REPL or an unsaved document. The second unpacked value
+is the recording length in milliseconds. If you do not need it, write
+`voice = load_sample("voice.wav")`. The sample handle can also be passed to
+`run(function, voice)`. Use `load_sample()` in setup;
+put `sampl()` in musical parts.
+
+`sampl(sample, volume, duration, *, start=None, rate=1.0, env=None, block=True)`:
+
+- Volume is 0–1; duration is a positive number of **beats**.
+- Start is a position in the recording in **seconds**, independent of rate.
+  An omitted start selects the first frame for positive rates and the last frame
+  for negative rates. Zero rate is invalid. Changing rate changes speed and pitch.
+- Envelope values are 2–128 amplitudes between 0 and 1, equally spaced across
+  the duration. `[0, 1, 0]` rises to full volume halfway through and falls to zero.
+  Omitted envelopes sustain at full volume. All voices have brief safety fades.
+- Playback stops at the requested duration or file boundary, without looping.
+  A blocking call advances by the full requested duration even if the file ends
+  sooner. `block=False` keeps the cursor in place, as with instruments.
+- Tempo changes adjust the remaining musical duration and envelope, while the
+  file-reading rate stays unchanged. Stop, replacement and script-exit behavior
+  follow the same rules as instrument notes.
+
+Samples are cached until the playback session closes (64 MiB per decoded sample,
+256 MiB total, at most 1024 handles). Up to 256 sample voices can overlap. A loaded handle keeps its
+audio even if the file changes; loading again creates a new version. Restart
+playback to clear the cache. Missing Pyo or an audio-device error is reported
+when using the sampler and does not disable FluidSynth instruments.
+
+The sampler and FluidSynth use separate native output streams coordinated by
+one musical transport. Their timing is not sample-locked; device buffering can
+introduce a small relative latency. `PYCHANGA_PYO_AUDIO` can select a Pyo output
+backend, for example `portaudio` (the default). Silent mode records sample events
+without importing Pyo. Try [the sampler example](examples/18_sampler.py), which
+includes a generated demonstration sound.
 
 Here is a composition with two parts. Save it as `song.py`, then run
 `python3 -m pyChanga song.py`. Press Ctrl+C to stop playback.

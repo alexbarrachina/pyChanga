@@ -13,6 +13,8 @@ from .errors import error_info
 from .execution import LaunchPlan, PartSource, prepare_run
 from .function_capture import MAX_FUNCTION_BYTES
 from .instruments import PROGRAMS
+from .sampler import RecordingSampler, SamplerHost
+from .samples import Sample, sample_from_dict, validate_play, envelope_points
 from .transport import Transport
 from .worker import run_worker
 
@@ -41,6 +43,21 @@ class Note:
 
 
 @dataclass
+class SampleNote:
+    identity: str
+    owner: str
+    sample: Sample
+    volume: float
+    offset: float
+    rate: float
+    env: tuple | None
+    start: float
+    end: float
+    on_sent: bool = False
+    off_sent: bool = False
+
+
+@dataclass
 class Revision:
     """One execution of a part; replacements prepare before taking over."""
 
@@ -61,7 +78,7 @@ class Revision:
     next_cursor: float | None = None
     done: bool = False
     cursor: float = 0
-    notes: dict[str, Note] = field(default_factory=dict)
+    notes: dict[str, Note | SampleNote] = field(default_factory=dict)
     output_epoch: float = 0
     output_bytes: int = 0
     output_warned: bool = False
@@ -92,8 +109,10 @@ class Engine:
     created implicitly; callers supply the backend and event callback.
     """
 
-    def __init__(self, backend=None, emit=None):
+    def __init__(self, backend=None, emit=None, sampler=None):
         self.backend = backend or RecordingBackend()
+        self.sampler = sampler or (RecordingSampler(self.backend.now, self.backend.events)
+                                   if isinstance(self.backend, RecordingBackend) else SamplerHost(self.backend.now))
         self.transport = Transport(self.backend.now())
         self.emit = emit or (lambda event: None)
         self.parts: dict[str, Part] = {}
@@ -103,7 +122,7 @@ class Engine:
         self.last_status = -math.inf
         self.closed = False
         self.launch_mode = "beat"
-        self.live_notes: dict[str, Note] = {}
+        self.live_notes: dict[str, Note | SampleNote] = {}
         self.live_cursor = 0.0
 
     def set_launch_mode(self, mode):
@@ -225,6 +244,7 @@ class Engine:
         if earliest_beat is not None:
             beat = max(beat, earliest_beat)
         self.transport.set_tempo(bpm, beat)
+        self._retime_samples()
         self.event("tempo", bpm=bpm, effectiveBeat=beat)
         return {"bpm": bpm, "effectiveBeat": beat}
 
@@ -247,7 +267,13 @@ class Engine:
                     self._launch(members)
             else:
                 self._launch([revision])
-        elif kind in ("note", "wait"):
+        elif kind in ("sample_load", "sample_ready"):
+            try:
+                result = self.sample_request(message)
+                revision.connection.send({"type": "continue", **result})
+            except Exception as error:
+                revision.connection.send({"type": "error", "message": str(error)})
+        elif kind in ("note", "sample", "wait"):
             if revision.start is None:
                 raise ValueError("The part has not completed setup")
             cursor = float(message["next"])
@@ -264,6 +290,15 @@ class Engine:
                         identity = uuid.uuid4().hex
                         revision.notes[identity] = Note(identity, revision.identity, message["instrument"], pitch,
                                                         message["volume"], onset, end)
+            elif kind == "sample":
+                if len(revision.notes) >= MAX_NOTES:
+                    raise ValueError("Too many pending samples. Add wait() or use blocking samples.")
+                sample, volume, duration, offset, rate, env, _ = self._sample_values(message)
+                onset = revision.start + message["cursor"]
+                if volume > 0:
+                    identity = uuid.uuid4().hex
+                    revision.notes[identity] = SampleNote(identity, revision.identity, sample, volume,
+                                                          offset, rate, env, onset, onset + duration)
             revision.next_cursor = revision.start + cursor
         elif kind == "tempo":
             self.set_tempo(message["bpm"], revision.start + message["cursor"])
@@ -321,6 +356,7 @@ class Engine:
             revision.group, revision.start = None, start
             if revision.initial_tempo is not None:
                 self.transport.set_tempo(revision.initial_tempo, start)
+                self._retime_samples()
                 self.event("tempo", bpm=revision.initial_tempo, effectiveBeat=start)
             part = self.parts[revision.part_id]
             if part.current:
@@ -434,6 +470,46 @@ class Engine:
         self.live_cursor = max(self.live_cursor, self.transport.beat_at(now + GUARD)) + beats
         return {"beat": self.live_cursor, "throttle": max(0, self.transport.time_at(self.live_cursor) - now - DIRECT_AHEAD)}
 
+    def sample_request(self, request):
+        sample = sample_from_dict(request["sample"])
+        if request["type"] == "sample_load":
+            self.sampler.load(sample)
+            return {}
+        return {"ready": self.sampler.ready(sample)}
+
+    def _sample_values(self, request):
+        sample = sample_from_dict(request["sample"])
+        values = validate_play(sample, request["volume"], request["duration"], request.get("offset"),
+                               request.get("rate", 1), request.get("env"), request.get("block", True))
+        if not self.sampler.ready(sample):
+            raise ValueError("The sample is still loading")
+        return sample, *values
+
+    def direct_sample(self, request):
+        sample, volume, duration, offset, rate, env, block = self._sample_values(request)
+        now = self.backend.now()
+        start = max(self.live_cursor, self.transport.beat_at(now + GUARD))
+        if len(self.live_notes) >= MAX_NOTES:
+            return {"retryAfter": 0.02}
+        end = start + duration
+        if volume > 0:
+            identity = uuid.uuid4().hex
+            self.live_notes[identity] = SampleNote(identity, "repl", sample, volume, offset, rate, env, start, end)
+        self.live_cursor = end if block else start
+        return {"beat": start, "throttle": max(0, self.transport.time_at(self.live_cursor) - now - DIRECT_AHEAD)}
+
+    def _update_sample(self, note, ending):
+        points = envelope_points(self.transport, note.start, note.end, note.env)
+        self.sampler.update(note.identity, self.transport.time_at(ending), points)
+
+    def _retime_samples(self):
+        queues = [(self.live_notes, None)]
+        queues += [(r.notes, r.stop) for p in self.parts.values() for r in (p.current, p.pending) if r]
+        for notes, stop in queues:
+            for note in notes.values():
+                if isinstance(note, SampleNote) and note.on_sent:
+                    self._update_sample(note, min(note.end, stop) if stop is not None else note.end)
+
     def _fail(self, part, revision, error):
         part.error = {key: error[key] for key in ("message", "filename", "line", "column", "traceback", "phase") if key in error}
         self.event("error", partId=part.identity, revision=revision.identity, requestId=revision.request_id,
@@ -449,11 +525,14 @@ class Engine:
         revision.stop = None
         now = self.backend.now()
         self.backend.remove_future(revision.identity)
+        self.sampler.remove_future(revision.identity)
         for note in revision.notes.values():
             if self.transport.time_at(note.start) >= now:
                 note.on_sent = False
             if self.transport.time_at(note.end) >= now:
                 note.off_sent = False
+            if isinstance(note, SampleNote) and note.on_sent:
+                self._update_sample(note, note.end)
 
     def _cancel_pending(self, part):
         if part.pending:
@@ -474,6 +553,7 @@ class Engine:
 
     def _terminate(self, revision, immediate=True):
         self.backend.release_owner(revision.identity, immediate=immediate)
+        self.sampler.release_owner(revision.identity)
         revision.notes.clear()
         revision.connection.close()
         if revision.process.is_alive():
@@ -500,6 +580,7 @@ class Engine:
         for identity in list(self.parts):
             self.stop(identity)
         self.backend.release_owner("repl", immediate=True)
+        self.sampler.release_owner("repl")
         self.live_notes.clear()
         self.live_cursor = 0
 
@@ -509,7 +590,7 @@ class Engine:
             self.event("warning", partId=part.identity, message="This part missed a note deadline. Long calculations or time.sleep() can make notes late; use wait() for musical timing.")
             revision.late_warned = True
 
-    def _schedule_notes(self, notes: dict[str, Note], now: float, *, stop: float | None = None) -> int:
+    def _schedule_notes(self, notes, now: float, *, stop: float | None = None) -> int:
         """Schedule any note queue; return how many late starts were dropped.
 
         A replacement may set a stop beat. Keep notes beyond it until the
@@ -527,13 +608,37 @@ class Engine:
                     del notes[identity]
                     missed += 1
                     continue
-                self.backend.note_on(identity, note.owner, note.instrument, note.pitch, note.volume, start_time)
+                if isinstance(note, SampleNote):
+                    points = envelope_points(self.transport, note.start, note.end, note.env)
+                    try:
+                        self.sampler.play(identity, note.owner, note.sample, note.volume, note.offset,
+                                          note.rate, start_time, end_time, points)
+                    except Exception as error:
+                        if note.owner != "repl":
+                            raise  # The normal worker handler reports the source location.
+                        del notes[identity]
+                        self.event("error", message=str(error))
+                        continue
+                else:
+                    self.backend.note_on(identity, note.owner, note.instrument, note.pitch, note.volume, start_time)
                 note.on_sent = True
             if note.on_sent and not note.off_sent and end_time <= horizon:
-                self.backend.note_off(identity, note.owner, end_time)
+                if isinstance(note, SampleNote):
+                    try:
+                        self._update_sample(note, ending)
+                    except Exception as error:
+                        if note.owner != "repl":
+                            raise
+                        del notes[identity]
+                        self.sampler.release_owner("repl")
+                        self.event("error", message=str(error))
+                        continue
+                else:
+                    self.backend.note_off(identity, note.owner, end_time)
                 note.off_sent = True
             if note.off_sent and end_time <= now:
-                self.backend.finish_note(identity)
+                if not isinstance(note, SampleNote):
+                    self.backend.finish_note(identity)
                 del notes[identity]
         return missed
 
@@ -541,6 +646,19 @@ class Engine:
         """Advance playback without waiting for any individual worker."""
         if self.closed:
             return
+        for error in self.sampler.poll():
+            owner = error.get("owner")
+            for identity, note in list(self.live_notes.items()):
+                if isinstance(note, SampleNote) and owner in (None, note.owner):
+                    del self.live_notes[identity]
+            for part in list(self.parts.values()):
+                for revision in (part.current, part.pending):
+                    if revision and (owner == revision.identity or owner is None and
+                                     any(isinstance(n, SampleNote) for n in revision.notes.values())):
+                        self._fail(part, revision, {"message": error["error"]})
+            if owner in (None, "repl"):
+                self.sampler.release_owner("repl")
+                self.event("error", message=error["error"])
         missed = self._schedule_notes(self.live_notes, self.backend.now())
         for _ in range(missed):
             self.event("warning", message="A direct note missed its deadline")
@@ -666,4 +784,5 @@ class Engine:
             self._reap()
             time.sleep(0.005)
         self.backend.close()
+        self.sampler.close()
         self.closed = True

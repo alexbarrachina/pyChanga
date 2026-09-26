@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import type { EngineEvent } from '../editor/bridge';
 
@@ -26,12 +27,17 @@ async function openDirectory(): Promise<string> {
 }
 
 function startService() {
-  const runtime = path.join(process.resourcesPath, 'runtime');
-  const python = app.isPackaged ? path.join(runtime, 'python', process.platform === 'win32' ? 'python.exe' : 'bin/python3')
-    : process.env.PYCHANGA_PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
-  const pythonPath = app.isPackaged ? path.join(runtime, 'packages') : path.join(root, 'pyChanga_package');
+  const runtime = app.isPackaged ? path.join(process.resourcesPath, 'runtime')
+    : path.join(root, 'runtime', `${process.platform}-${process.arch}`, 'runtime');
+  const runtimePython = path.join(runtime, 'python', process.platform === 'win32' ? 'python.exe' : 'bin/python3');
+  const useRuntime = app.isPackaged || (!process.env.PYCHANGA_PYTHON && existsSync(runtimePython));
+  const python = useRuntime ? runtimePython : process.env.PYCHANGA_PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
+  const pythonPath = app.isPackaged ? path.join(runtime, 'packages')
+    : [path.join(root, 'pyChanga_package'), ...(useRuntime ? [path.join(runtime, 'packages')] : []), process.env.PYTHONPATH]
+      .filter(Boolean).join(path.delimiter);
   const env = {...process.env, PYTHONPATH: pythonPath, PYTHONUNBUFFERED: '1', PYTHONIOENCODING: 'utf-8',
-    ...(app.isPackaged ? {PYCHANGA_NATIVE_DIR: path.join(runtime, 'native')} : {})};
+    ...(useRuntime ? {PYCHANGA_NATIVE_DIR: app.isPackaged ? path.join(runtime, 'native')
+      : process.env.PYCHANGA_NATIVE_DIR || path.join(runtime, 'native')} : {})};
   const child = spawn(python, ['-m', 'pyChanga', '--service', ...(process.env.PYCHANGA_SILENT === '1' ? ['--silent'] : [])],
     {cwd: app.isPackaged ? app.getPath('userData') : root, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe']});
   service = child;

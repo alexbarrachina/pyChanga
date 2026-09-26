@@ -13,6 +13,15 @@ records exact versions and native library hashes in `runtime-manifest.json`.
 - **pyChanga.sf2**: project-provided SoundFont, included under
   `runtime/packages/pyChanga/sounds`. Its source path and SHA-256 hash are recorded
   in `runtime-manifest.json`.
+- **Pyo 1.0.6**: LGPL-3.0-or-later. Distributed as separate extension modules
+  under `runtime/packages/pyo`, with its license retained in
+  `runtime/packages/pyo-1.0.6.dist-info/LICENSE`. Source:
+  https://github.com/belangeo/pyo
+  The maintainer's wheels include native audio/file libraries. Their license
+  files and wheel metadata are retained in `runtime/packages`; binary paths and
+  hashes are recorded in the Pyo section of `runtime-manifest.json`.
+- **Sampler demo**: an original generated waveform in `examples/samples/demo.wav`;
+  no third-party recording is used. See its adjacent README for generation details.
 - **Electron**: MIT and its bundled Chromium/third-party licenses. Electron
   license files are retained in the packaged application.
 - **Monaco Editor**: MIT, https://github.com/microsoft/monaco-editor

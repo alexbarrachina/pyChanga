@@ -1,4 +1,4 @@
-"""Prepare an offline Python + FluidSynth runtime. No system Python is shipped.
+"""Prepare an offline Python + FluidSynth + Pyo runtime.
 
 Downloads have pinned checksums. On macOS, copy and relocate the native
 FluidSynth dependency tree from Homebrew; it is needed only on build machines.
@@ -98,6 +98,30 @@ def mac_native(destination):
     return manifest
 
 
+def sampler(runtime, packages, target):
+    """Install the exact Pyo wheel, including its bundled native libraries."""
+    specification = LOCK['pyo'][target]
+    wheel = download(specification['url'], specification['sha256'])
+    python = runtime / 'python' / ('python.exe' if target.startswith('win32') else 'bin/python3')
+    subprocess.run([str(python), '-m', 'pip', 'install', '--no-index', '--no-deps',
+                    '--upgrade', '--target', str(packages), str(wheel)], check=True)
+    native_files = []
+    # Some wheels place shared libraries beside the Python package.
+    for path in sorted(packages.rglob('*')):
+        if path.suffix in ('.so', '.dylib', '.dll', '.pyd'):
+            if target.startswith('darwin'):
+                subprocess.run(['codesign', '--force', '--sign', '-', str(path)], check=True, capture_output=True)
+            native_files.append({'path': path.relative_to(runtime).as_posix(),
+                                 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()})
+    environment = {**os.environ, 'PYTHONPATH': str(packages), 'PYCHANGA_REQUIRE_PYO': '1'}
+    # Rendering tests make a missing or broken sampler a build error on every
+    # target, without requiring a physical audio device on the build machine.
+    subprocess.run([str(python), '-m', 'unittest', 'discover', '-s', str(ROOT / 'tests'),
+                    '-p', 'test_native_sampler.py', '-v'],
+                   env=environment, check=True, timeout=30)
+    return {'version': LOCK['pyo']['version'], **specification, 'native': native_files}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--soundfont-only', action='store_true')
@@ -125,6 +149,7 @@ def main():
         shutil.rmtree(packages / 'pyChanga')
     shutil.copytree(ROOT / 'pyChanga_package' / 'pyChanga', packages / 'pyChanga',
                     ignore=shutil.ignore_patterns('__pycache__', 'Emu_Planet_Phatt_Hip_Hop.sf2'))
+    pyo = sampler(runtime, packages, args.target)
     native = runtime / 'native'
     native.mkdir(exist_ok=True)
     if args.target.startswith('darwin'):
@@ -141,7 +166,7 @@ def main():
                     target = native / Path(member.filename).name
                     target.write_bytes(source.read(member))
                     manifest.append({'name':target.name,'sha256':hashlib.sha256(target.read_bytes()).hexdigest()})
-    (runtime / 'runtime-manifest.json').write_text(json.dumps({'target':args.target,'python':python,'native':manifest,'soundfont':font}, indent=2))
+    (runtime / 'runtime-manifest.json').write_text(json.dumps({'target':args.target,'python':python,'native':manifest,'soundfont':font,'pyo':pyo}, indent=2))
     shutil.copy2(ROOT / 'THIRD_PARTY_NOTICES.md', runtime / 'THIRD_PARTY_NOTICES.md')
     print('Offline runtime ready:', runtime, flush=True)
 

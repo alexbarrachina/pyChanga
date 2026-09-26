@@ -19,6 +19,7 @@ import time
 import uuid
 
 from .function_capture import capture_function
+from .samples import read_sample
 
 
 class DefaultRuntime:
@@ -27,6 +28,7 @@ class DefaultRuntime:
     def __init__(self):
         script = getattr(sys.modules.get("__main__"), "__file__", None)
         self.script_mode = bool(script and not str(script).startswith("<"))
+        self.sample_directory = Path(script).resolve().parent if self.script_mode else None
         environment = os.environ.copy()
         package_root = str(Path(__file__).resolve().parents[1])
         environment["PYTHONPATH"] = os.pathsep.join(filter(None, (package_root, environment.get("PYTHONPATH"))))
@@ -112,6 +114,26 @@ class DefaultRuntime:
     def wait(self, beats):
         self._throttle()
         result = self._command("wait", beats=beats)
+        self.throttle_until = time.monotonic() + result["throttle"]
+
+    def load_sample(self, path):
+        path = Path(path).expanduser()
+        if self.sample_directory is not None and not path.is_absolute():
+            path = self.sample_directory / path
+        sample = read_sample(path)
+        self._command("sample_load", sample=sample.to_dict())
+        while not self._command("sample_ready", sample=sample.to_dict())["ready"]:
+            time.sleep(.01)
+        return sample
+
+    def sample(self, sample, volume, duration, start, rate, env, block):
+        self._throttle()
+        while True:
+            result = self._command("sample", sample=sample.to_dict(), volume=volume,
+                                   duration=duration, offset=start, rate=rate, env=env, block=block)
+            if "retryAfter" not in result:
+                break
+            time.sleep(result["retryAfter"])
         self.throttle_until = time.monotonic() + result["throttle"]
 
     def tempo(self, bpm):

@@ -35,6 +35,10 @@ def _dispatch(engine, request: dict) -> dict:
         return engine.run_callable(request)
     if kind == "note":
         return engine.direct_note(request)
+    if kind == "sample":
+        return engine.direct_sample(request)
+    if kind in ("sample_load", "sample_ready"):
+        return engine.sample_request(request)
     if kind == "wait":
         return engine.direct_wait(request["beats"])
     if kind == "launch_mode":

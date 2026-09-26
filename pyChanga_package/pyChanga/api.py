@@ -6,12 +6,15 @@ from threading import Lock
 from typing import Protocol
 from .instruments import PROGRAMS
 from .scales import Scale, major_scale, natural_minor_scale, pentatonic_scale, pentatonic_minor_scale
+from .samples import Sample, validate_play
 
 
 class Runtime(Protocol):
     """Execution context used by musical commands; independent of any editor."""
 
     def note(self, instrument: str, pitches: list[int], volume: float, duration: float, block: bool) -> None: ...
+    def load_sample(self, path) -> Sample: ...
+    def sample(self, sample: Sample, volume, duration, start, rate, env, block) -> None: ...
     def wait(self, beats: float) -> None: ...
     def tempo(self, bpm: float) -> None: ...
     def run(self, function, args: tuple, kwargs: dict) -> str | None: ...
@@ -108,6 +111,25 @@ def run(function, *args, **kwargs) -> str | None:
     return _context().run(function, args, kwargs)
 
 
+def load_sample(path) -> Sample:
+    """Load a WAV; unpack the result as (sample, length_ms) if needed.
+
+    Relative paths use the script directory, or the REPL's current directory.
+    """
+    return _context().load_sample(path)
+
+
+def sampl(sample, volume, duration, *, start=None, rate=1.0, env=None, block=True) -> None:
+    """Play a sample: duration in beats, start in seconds, negative rate reverses.
+
+    An omitted start selects the beginning, or the last frame for reverse
+    playback. Envelope points are equally spaced across the duration. Playback
+    stops at the file boundary without looping; block=False overlaps voices.
+    """
+    values = validate_play(sample, volume, duration, start, rate, env, block)
+    _context().sample(sample, *values)
+
+
 def _player(instrument: str):
     def play(note, vol, dur, block=True):
         pitches = list(note) if isinstance(note, (list, tuple)) else [note]
@@ -185,6 +207,7 @@ def char2ascii(char):
 
 
 __all__ = [*PROGRAMS, *(f"set_{name}" for name in PROGRAMS), "set_drums3", "wait", "tempo", "run",
+           "load_sample", "sampl",
            "start_immediate", "start_on_beat", "start_on_bar", "stop", "stop_all", "status",
            "Scale", "major_scale", "natural_minor_scale", "pentatonic_scale", "pentatonic_minor_scale",
            "drumSeq", "chipSeq", "char2ascii"]

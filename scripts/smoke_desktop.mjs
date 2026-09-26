@@ -141,6 +141,22 @@ try {
   await page.locator('#stop-all').click();
 
   await page.locator('#clear-output').click();
+  // Exercise sample loading through the same desktop → worker → engine path.
+  // Packaged runs read the bundled asset, with no system Python on PATH.
+  const sampleRoot = packaged ? await application.evaluate(() => process.resourcesPath) : path.resolve('.');
+  const samplePath = path.join(sampleRoot, 'examples', 'samples', 'demo.wav');
+  const samplerSource = '# %% setup\nfrom pyChanga import *\nvoice=load_sample(' + JSON.stringify(samplePath) +
+    ')\n# %% sampler\nsampl(voice,.2,.15,rate=-.8,env=[0,1,0],block=False)\npiano(60,.2,.15)\n';
+  const sampled = await page.evaluate(source => window.pyChanga.command({type:'run', documentId:'sampler-test',
+    filename:'sampler-test.py', source, name:'sampler', quantization:'immediate'}), samplerSource);
+  expect(sampled.error).toBeUndefined();
+  await expect.poll(async () => {
+    const state = await page.evaluate(() => window.pyChanga.command({type:'status'}));
+    const part = state.parts.find(part => part.id === sampled.partId);
+    if (part?.error) throw new Error(part.error.message);
+    return part?.state;
+  }, {timeout:15000}).toBe('finished');
+
   const printResult = await page.evaluate(() => window.pyChanga.command({type:'run',documentId:'print-test',
     filename:'print-test.py',source:'print("a", 7)\nprint("next")\n',quantization:'immediate'}));
   expect(printResult.error).toBeUndefined();

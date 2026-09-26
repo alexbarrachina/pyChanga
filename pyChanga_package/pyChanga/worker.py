@@ -5,10 +5,12 @@ import linecache
 import os
 from pathlib import Path
 import sys
+import time
 
 from . import api
 from .errors import error_info
 from .function_capture import capture_function, restore_function
+from .samples import read_sample
 
 
 class PartRuntime:
@@ -40,6 +42,22 @@ class PartRuntime:
             raise RuntimeError("Put waits in a musical part, not setup")
         self.cursor += beats
         self.request({"type": "wait", "next": self.cursor})
+
+    def load_sample(self, path):
+        sample = read_sample(path)
+        self.request({"type": "sample_load", "sample": sample.to_dict()})
+        while not self.request({"type": "sample_ready", "sample": sample.to_dict()})["ready"]:
+            time.sleep(.01)
+        return sample
+
+    def sample(self, sample, volume, duration, start, rate, env, block):
+        if self.preparing:
+            raise RuntimeError("Put sampl() in a musical part, not setup. load_sample() belongs in setup.")
+        next_cursor = self.cursor + duration if block else self.cursor
+        self.request({"type": "sample", "sample": sample.to_dict(), "volume": volume,
+                      "duration": duration, "offset": start, "rate": rate, "env": env,
+                      "block": block, "cursor": self.cursor, "next": next_cursor})
+        self.cursor = next_cursor
 
     def tempo(self, bpm):
         if self.preparing:

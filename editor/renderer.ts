@@ -40,6 +40,8 @@ const instruments = ['piano','rhodes','epiano','cbass','drums','chip','bass','vi
 const functions = [...instruments.map(name => ({name, signature: '(note, vol, dur, block=True)',
   insert: `${name}(\${1:60}, \${2:0.7}, \${3:0.5})`, description: 'Play a MIDI pitch or list of pitches. Volume: 0–1. Duration: beats. block=False overlaps notes.'})),
   {name:'wait',signature:'(beats)',insert:'wait(${1:1})',description:'Rest for beats. Other musical parts keep playing.'},
+  {name:'load_sample',signature:'(path)',insert:'load_sample("${1:voice.wav}")',description:'Load a mono or stereo PCM WAV. Unpack as voice, length_ms = load_sample(path) to get its length in milliseconds. Paths are relative to the saved composition. The IDE includes Pyo; standalone installs need the sampler extra.'},
+  {name:'sampl',signature:'(sample, volume, duration, *, start=None, rate=1.0, env=None, block=True)',insert:'sampl(${1:voice}, ${2:0.7}, ${3:1})',description:'Play a sample. Volume: 0–1. Duration: beats. Start: seconds into the file. Negative rates play backward; omitted start selects the end for reverse playback. env=[0, 1, 0] fades in and out. block=False overlaps voices.'},
   {name:'tempo',signature:'(bpm)',insert:'tempo(${1:60})',description:'Change the shared tempo on the next available beat (20–400 BPM; starts at 60).'},
   {name:'run',signature:'(function, *args, **kwargs)',insert:'run(${1:melody})',description:'Start an independent numbered instance of a function, such as melody1.'},
   ...['start_immediate','start_on_beat','start_on_bar'].map(name => ({name,signature:'()',insert:`${name}()`,description:'Set the shared launch mode for subsequent parts and sections.'})),

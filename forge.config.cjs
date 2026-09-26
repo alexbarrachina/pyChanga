@@ -40,6 +40,15 @@ module.exports = {
       });
       const manifestPath = path.join(runtime, 'runtime-manifest.json');
       const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      if (!manifest.pyo?.native?.length || !fs.existsSync(path.join(runtime, 'packages', 'pyo'))) {
+        throw new Error('The IDE requires Pyo. Run python3 scripts/prepare_runtime.py again.');
+      }
+      for (const library of manifest.pyo.native) {
+        const bytes = fs.readFileSync(path.join(runtime, library.path));
+        if (createHash('sha256').update(bytes).digest('hex') !== library.sha256) {
+          throw new Error(`Pyo library has changed: ${library.path}. Prepare the runtime again.`);
+        }
+      }
       manifest.soundfont = {source: fontSource, soundfontSha256: createHash('sha256').update(font).digest('hex')};
       fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
       fs.copyFileSync(path.join(__dirname, 'THIRD_PARTY_NOTICES.md'), path.join(runtime, 'THIRD_PARTY_NOTICES.md'));
