@@ -37,7 +37,7 @@ class Note:
     identity: str
     owner: str
     instrument: str
-    pitch: int
+    pitch: float
     volume: float
     start: float
     end: float
@@ -442,7 +442,8 @@ class Engine:
         pitches = request["pitches"]
         duration, volume, block = request["duration"], request["volume"], request["block"]
         if request["instrument"] not in PROGRAMS or not isinstance(pitches, list) or not pitches or any(
-            isinstance(pitch, bool) or not isinstance(pitch, int) or not 0 <= pitch <= 127 for pitch in pitches
+            isinstance(pitch, bool) or not isinstance(pitch, (int, float)) or
+            not math.isfinite(pitch) or not 0 <= pitch <= 127 for pitch in pitches
         ):
             raise ValueError("Invalid direct note")
         if len(pitches) > MAX_NOTES:

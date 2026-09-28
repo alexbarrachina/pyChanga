@@ -57,6 +57,15 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(result["error"]["line"], 2)
         self.assertFalse(self.engine.active)
 
+    def test_direct_microtonal_validation(self):
+        fields = dict(instrument='piano', pitches=[60.5, 64.25], volume=.8, duration=1, block=True)
+        for pitches in ([True], [float('nan')], [float('inf')], [-.1], [127.1]):
+            with self.subTest(pitches=pitches):
+                self.assertFalse(self.command('note', **{**fields, 'pitches': pitches})['ok'])
+                self.assertFalse(self.engine.live_notes)
+        self.assertTrue(self.command('note', **fields)['ok'])
+        self.assertEqual([n.pitch for n in self.engine.live_notes.values()], [60.5, 64.25])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -21,7 +21,7 @@ from .samples import Sample, validate_play
 class Runtime(Protocol):
     """Execution context used by musical commands; independent of any editor."""
 
-    def note(self, instrument: str, pitches: list[int], volume: float, duration: float, block: bool) -> None: ...
+    def note(self, instrument: str, pitches: list[float], volume: float, duration: float, block: bool) -> None: ...
     def load_sample(self, path) -> Sample: ...
     def sample(self, sample: Sample, volume, duration, start, rate, env, block) -> None: ...
     def wait(self, beats: float) -> None: ...
@@ -149,20 +149,19 @@ def _player(instrument: str):
                 isinstance(pitch, bool)
                 or not isinstance(pitch, Real)
                 or not isfinite(pitch)
-                or int(pitch) != pitch
                 or not 0 <= pitch <= 127
             ):
-                raise ValueError("Notes must be whole MIDI pitches from 0 to 127; microtonal pitches are not supported")
+                raise ValueError("Notes must be finite MIDI pitches from 0 to 127 (decimals are allowed)")
         volume = _number(vol, "Volume", 0, 1)
         duration = _number(dur, "Duration", 0)
         if duration == 0:
             raise ValueError("Duration must be greater than zero")
         if not isinstance(block, bool):
             raise TypeError("block must be True or False")
-        _context().note(instrument, [int(p) for p in pitches], volume, duration, block)
+        _context().note(instrument, [float(p) for p in pitches], volume, duration, block)
     play.__name__ = instrument
     play.__qualname__ = instrument
-    play.__doc__ = f"Play {instrument}: MIDI note (or chord), volume 0–1, duration in beats."
+    play.__doc__ = f"Play {instrument}: MIDI pitch (decimals allowed, or a chord), volume 0–1, duration in beats."
     return play
 
 

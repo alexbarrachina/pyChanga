@@ -69,6 +69,24 @@ class NativeAudioTests(unittest.TestCase):
         left, _ = self.audio.render(4800)
         self.assertGreater(rms(left), .001)
 
+    def test_microtonal_frequency_and_reused_channel_reset(self):
+        frequencies = []
+        channels = []
+        for pitch in (60, 60.5, 59.75, 60):
+            self.audio.note_on('a', 'one', 'organ', pitch, .7, self.audio.now() + .01)
+            channels.append(self.audio.voices['a'].channel)
+            left, _ = self.audio.render(24000)
+            samples = left[4800:19200]
+            self.assertGreater(rms(samples), .001)
+            crossings = [i for i in range(1, len(samples)) if samples[i - 1] < 0 <= samples[i]]
+            frequencies.append((len(crossings) - 1) * 48000 / (crossings[-1] - crossings[0]))
+            self.audio.note_off('a', 'one', self.audio.now())
+            self.audio.render(48000)
+            self.audio.finish_note('a')
+        self.assertEqual(len(set(channels)), 1)
+        for frequency, semitones in zip(frequencies, (0, .5, -.25, 0)):
+            self.assertAlmostEqual(frequency / frequencies[0], 2 ** (semitones / 12), delta=.003)
+
 
 if __name__ == '__main__':
     unittest.main()

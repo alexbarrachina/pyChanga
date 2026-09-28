@@ -46,6 +46,15 @@ class EngineTests(unittest.TestCase):
         off = next(e for e in notes if e['type'] == 'off')
         self.assertAlmostEqual(off['at'] - on['at'], 0.4, places=5)
 
+    def test_worker_microtonal_chord_drains(self):
+        result = self.run_part('strings([60.5, 64.25], .8, .2, block=False)')
+        self.until(lambda: self.engine.parts[result['partId']].state == 'finished')
+        starts = [e for e in self.backend.events if e['type'] == 'on']
+        self.assertEqual([e['pitch'] for e in starts], [60.5, 64.25])
+        for start in starts:
+            off = next(e for e in self.backend.events if e['type'] == 'off' and e['id'] == start['id'])
+            self.assertAlmostEqual(off['at'] - start['at'], .2)
+
     def test_direct_notes_advance_then_resynchronize_after_idle(self):
         first = self.engine.direct_note({'instrument': 'piano', 'pitches': [60], 'volume': .5,
                                          'duration': .05, 'block': True})

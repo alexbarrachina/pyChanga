@@ -203,8 +203,11 @@ reproducible results.
 
 ## Music API
 
-`piano(note, vol, dur, block=True)` accepts a whole MIDI pitch from 0 to 127 or a
-list/tuple of pitches for a chord. Volume ranges from 0 to 1. Duration is a
+`piano(note, vol, dur, block=True)` accepts a MIDI pitch from 0 to 127 or a
+list/tuple of pitches for a chord. Decimal pitches are microtonal: `60.5` is
+halfway between C4 and C♯4. For example, `piano(60.5, 0.7, 1)` plays a
+quarter-tone above middle C; `piano([60, 64.25, 67.5], 0.7, 1)` plays a
+microtonal chord. Volume ranges from 0 to 1. Duration is a
 positive number of beats. Volume zero is silent; MIDI pitch zero is a real note.
 All instruments below use the same arguments. The bundled soundfont provides
 these bank-0 presets:

@@ -158,6 +158,7 @@ class FluidSynthBackend:
             "fluid_synth_sfload": (integer, [ptr, text, integer]),
             "fluid_synth_program_select": (integer, [ptr, integer, integer, integer, integer]),
             "fluid_synth_set_channel_type": (integer, [ptr, integer, integer]),
+            "fluid_synth_pitch_wheel_sens": (integer, [ptr, integer, integer]),
             "fluid_synth_all_sounds_off": (integer, [ptr, integer]),
             "fluid_synth_all_notes_off": (integer, [ptr, integer]),
             "fluid_synth_write_float": (integer, [ptr, integer, ptr, integer, integer, ptr, integer, integer]),
@@ -173,6 +174,7 @@ class FluidSynthBackend:
             "fluid_event_set_source": (None, [ptr, short]), "fluid_event_set_dest": (None, [ptr, short]),
             "fluid_event_noteon": (None, [ptr, integer, short, short]),
             "fluid_event_noteoff": (None, [ptr, integer, short]),
+            "fluid_event_pitch_bend": (None, [ptr, integer, integer]),
         }
         for name, (result, args) in definitions.items():
             function = getattr(self.lib, name)
@@ -206,6 +208,8 @@ class FluidSynthBackend:
             self.fluid_event_set_dest(event, self.destination)
             if kind == "on":
                 self.fluid_event_noteon(event, channel, pitch, velocity)
+            elif kind == "bend":
+                self.fluid_event_pitch_bend(event, channel, pitch)
             else:
                 self.fluid_event_noteoff(event, channel, pitch)
             tick = max(self.fluid_sequencer_get_tick(self.seq), round((at - self.origin) * 1000))
@@ -215,6 +219,7 @@ class FluidSynthBackend:
             self.delete_fluid_event(event)
 
     def note_on(self, identity, owner, instrument, pitch, volume, at):
+        midi_pitch = round(pitch)
         existing = self.voices.get(identity)
         if existing:
             channel = existing.channel
@@ -226,12 +231,15 @@ class FluidSynthBackend:
                 raise AudioError("Too many overlapping notes (256 voices). Stop a part or shorten note durations.")
             self.channels[channel] = owner
             self.busy.add(channel)
-            self.voices[identity] = Voice(owner, channel, pitch)
+            self.voices[identity] = Voice(owner, channel, midi_pitch)
         # The custom drum and chip kits are regular bank-0 presets too.
         self.fluid_synth_set_channel_type(self.synth, channel, 0)
         if self.fluid_synth_program_select(self.synth, channel, self.soundfont, 0, PROGRAMS[instrument]) < 0:
             raise AudioError(f"The soundfont does not contain {instrument}")
-        self._send(owner, at, "on", channel, pitch, max(1, round(volume * 127)))
+        # Each note owns a channel; set its fractional tuning at the note onset.
+        self.fluid_synth_pitch_wheel_sens(self.synth, channel, 2)
+        self._send(owner, at, "bend", channel, 8192 + round((pitch - midi_pitch) * 4096))
+        self._send(owner, at, "on", channel, midi_pitch, max(1, round(volume * 127)))
 
     def note_off(self, identity, owner, at):
         voice = self.voices.get(identity)

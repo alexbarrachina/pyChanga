@@ -87,9 +87,9 @@ class ReplTests(unittest.TestCase):
                   'start_immediate()\n'
                   'def melody():\n'
                   '    print("from launched part")\n'
-                  '    piano(64, .5, .15)\n'
+                  '    piano(64.25, .5, .15)\n'
                   'print(run(melody))\n'
-                  'piano(60, .5, .15)\n')
+                  'piano(60.5, .5, .15)\n')
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "song.py"
             path.write_text(source)

@@ -58,9 +58,16 @@ class MusicTests(unittest.TestCase):
                 pyChanga.run(value)
         self.assertEqual(self.runtime.calls, [])
     def test_validation(self):
-        for args in [(60.5, 0.5, 1), (128, 0.5, 1), (60, 2, 1), (60, 0.5, 0), (60, float('nan'), 1), ([], 0.5, 1)]:
+        for args in [(True, .5, 1), (-.5, .5, 1), (float('nan'), .5, 1), (float('inf'), .5, 1), (128, 0.5, 1), (60, 2, 1), (60, 0.5, 0), (60, float('nan'), 1), ([], 0.5, 1)]:
             with self.subTest(args=args), self.assertRaises(ValueError):
                 pyChanga.piano(*args)
+    def test_microtonal_notes_and_chords(self):
+        pyChanga.piano(60.5, .7, 1)
+        pyChanga.strings([0, 60.5, 64.25, 127], .8, 2, block=False)
+        self.assertEqual(self.runtime.calls, [
+            ("note", "piano", [60.5], .7, 1, True),
+            ("note", "strings", [0, 60.5, 64.25, 127], .8, 2, False),
+        ])
     def test_drum_rest_duration_and_mapping(self):
         pyChanga.drumSeq("kshctom-", 0.75)
         self.assertEqual(self.runtime.calls, [

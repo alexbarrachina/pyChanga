@@ -41,7 +41,7 @@ const editor = monaco.editor.create($('editor'), {language: 'python', theme: 'py
 
 const instruments = ['piano','rhodes','epiano','cbass','drums','chip','bass','vibra','marimba','b3','organ','sh2000','arp','ether','violin','viola','cello','strings','oboe','clarinet','sub'];
 const functions = [...instruments.map(name => ({name, signature: '(note, vol, dur, block=True)',
-  insert: `${name}(\${1:60}, \${2:0.7}, \${3:0.5})`, description: 'Play a MIDI pitch or list of pitches. Volume: 0–1. Duration: beats. block=False overlaps notes.'})),
+  insert: `${name}(\${1:60}, \${2:0.7}, \${3:0.5})`, description: 'Play a MIDI pitch or list of pitches; decimals such as 60.5 are microtonal. Volume: 0–1. Duration: beats. block=False overlaps notes.'})),
   {name:'wait',signature:'(beats)',insert:'wait(${1:1})',description:'Rest for beats. Other musical parts keep playing.'},
   {name:'load_sample',signature:'(path)',insert:'load_sample("${1:voice.wav}")',description:'Load a mono or stereo PCM WAV. Unpack as voice, length_ms = load_sample(path) to get its length in milliseconds. Paths are relative to the saved composition. The IDE includes Pyo; standalone installs need the sampler extra.'},
   {name:'sampl',signature:'(sample, volume, duration, *, start=None, rate=1.0, env=None, block=True)',insert:'sampl(${1:voice}, ${2:0.7}, ${3:1})',description:'Play a sample. Volume: 0–1. Duration: beats. Start: seconds into the file. Negative rates play backward; omitted start selects the end for reverse playback. env=[0, 1, 0] fades in and out. block=False overlaps voices.'},
