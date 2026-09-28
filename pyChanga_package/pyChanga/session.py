@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Lazy package runtime for an ordinary Python interpreter.
 
 The service owns the clock and audio device. This small client only serializes

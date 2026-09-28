@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Verify the supplied soundfont and the offline runtime's source selection."""
 import hashlib
 import importlib.util

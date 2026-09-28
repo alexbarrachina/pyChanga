@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Alex Barrachina
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Use macOS's image builder directly; no native Node addon is needed to make a DMG.
 const { MakerBase } = require('@electron-forge/maker-base');
 const fs = require('node:fs/promises');

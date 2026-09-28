@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Capture run() calls for independent workers, in the REPL and in parts."""
 from __future__ import annotations
 

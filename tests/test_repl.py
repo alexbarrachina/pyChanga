@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Exercise ordinary Python entry points against the real silent service."""
 from pathlib import Path
 import os

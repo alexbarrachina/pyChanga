@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Alex Barrachina
+// SPDX-License-Identifier: GPL-3.0-only
+
 const path = require('node:path');
 const fs = require('node:fs');
 const {createHash} = require('node:crypto');
@@ -18,7 +21,7 @@ module.exports = {
     appCategoryType: 'public.app-category.education',
     prune: false,
     ignore: filename => filename !== '' && !/^\/(dist($|\/)|package\.json$)/.test(filename.replace(/\\/g, '/')),
-    extraResource: [runtime, path.join(__dirname, 'examples'), path.join(__dirname, 'THIRD_PARTY_NOTICES.md')],
+    extraResource: [runtime, path.join(__dirname, 'examples'), path.join(__dirname, 'LICENSE'), path.join(__dirname, 'THIRD_PARTY_NOTICES.md')],
     ...(signing && process.platform === 'darwin' ? {
       osxSign: {identity: process.env.APPLE_SIGN_IDENTITY, optionsForFile: () => ({
         entitlements: path.join(__dirname, 'scripts', 'entitlements.plist'), hardenedRuntime: true,
@@ -59,7 +62,7 @@ module.exports = {
     new PyChangaDmgMaker(),
     {name: '@electron-forge/maker-zip', platforms: ['darwin', 'win32']},
     {name: '@electron-forge/maker-squirrel', platforms: ['win32'], config: {
-      name: 'pyChangaIDE', authors: 'pyChangaIDE', description: 'Python live coding for musicians',
+      name: 'pyChangaIDE', authors: 'Alex Barrachina', description: 'Python live coding for musicians',
       ...(signing ? {certificateFile: process.env.WINDOWS_CERTIFICATE_FILE, certificatePassword: process.env.WINDOWS_CERTIFICATE_PASSWORD} : {}),
     }},
   ],

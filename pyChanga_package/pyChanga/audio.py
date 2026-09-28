@@ -1,4 +1,13 @@
-"""A small FluidSynth C API adapter and a deterministic recording backend."""
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
+"""A small FluidSynth C API adapter and a deterministic recording backend.
+
+SCAMP, created by Marc Evanstein, inspired pyChanga's use of FluidSynth for
+SoundFont playback: https://scamp.marcevanstein.com/.
+This adapter is newly written; see the repository's README.md acknowledgements
+and THIRD_PARTY_NOTICES.md for further credit.
+"""
 from __future__ import annotations
 import ctypes as C
 from ctypes.util import find_library

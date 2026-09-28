@@ -1,4 +1,13 @@
-"""The synchronous teaching API. Importing it never opens audio."""
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
+"""The synchronous teaching API. Importing it never opens audio.
+
+The musical API is inspired by SCAMP (Suite for Computer-Assisted Music in
+Python), created by Marc Evanstein: https://scamp.marcevanstein.com/.
+The current pyChanga implementation is newly written; see the repository's
+README.md acknowledgements and THIRD_PARTY_NOTICES.md for further credit.
+"""
 from __future__ import annotations
 from math import isfinite
 from numbers import Real

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Render actual Pyo output without an audio device; optional in base installs."""
 import ctypes
 import gc

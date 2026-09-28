@@ -21,7 +21,8 @@ records exact versions and native library hashes in `runtime-manifest.json`.
   files and wheel metadata are retained in `runtime/packages`; binary paths and
   hashes are recorded in the Pyo section of `runtime-manifest.json`.
 - **Sampler demo**: an original generated waveform in `examples/samples/demo.wav`;
-  no third-party recording is used. See its adjacent README for generation details.
+  no third-party recording is used. Copyright © 2026 Alex Barrachina; licensed
+  under GPL-3.0-only. See its adjacent README for generation details.
 - **Electron**: MIT and its bundled Chromium/third-party licenses. Electron
   license files are retained in the packaged application.
 - **Monaco Editor**: MIT, https://github.com/microsoft/monaco-editor
@@ -30,8 +31,33 @@ records exact versions and native library hashes in `runtime-manifest.json`.
   `runtime/packages/pyChanga/_vendor/cloudpickle/LICENSE`.
   Source: https://pypi.org/project/cloudpickle/3.1.2/
 
+# Design acknowledgements
+
+**SCAMP (Suite for Computer-Assisted Music in Python)**, created by **Marc
+Evanstein**, is a major inspiration for pyChanga's musical API and overall design,
+including musical timing and SoundFont playback through FluidSynth. The current
+pyChanga implementation is newly written. We thank Marc Evanstein and the SCAMP
+contributors for their ideas and work.
+
+- Project and documentation: https://scamp.marcevanstein.com/
+- Author: https://www.marcevanstein.com/
+- Source: https://github.com/MarcTheSpark/scamp
+
+SCAMP is not a runtime dependency of the current pyChanga engine. This
+acknowledgement does not replace the license notices for any bundled components.
+
+# Original project code
+
+Copyright © 2026 Alex Barrachina for the original pyChanga and pyChangaIDE
+source code, tests, examples, documentation, and build files. These original
+contributions are licensed under GPL-3.0-only; see `LICENSE`. That license
+does not supersede the licenses or rights of the components and historical
+materials listed here, nor the underlying musical works used in examples.
+
+# Historical components
+
 The old TimGM6mb and E-mu SoundFonts and vendored SCAMP/clockblocks reference code
 are not included in new application distributions. Historical TimGM6mb attribution
 and license files are retained in `legacy/sounds`. The new engine does not copy their
 implementation. This notice does not change the licenses of the original course
-materials or select a license for the user's new application code.
+materials.

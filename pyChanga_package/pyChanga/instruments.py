@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Zero-based presets in pyChanga.sf2. All instruments use bank 0."""
 PROGRAMS = {
     "piano": 0, "rhodes": 1, "epiano": 2, "cbass": 3, "drums": 4,

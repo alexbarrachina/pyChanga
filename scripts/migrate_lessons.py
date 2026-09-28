@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Generate teaching copies of fork-based lessons. Originals stay untouched.
 
 Only selected, syntactically complete concurrency examples are transformed.

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The conductor: process supervision, a beat timeline, and bounded scheduling."""
 from __future__ import annotations
 import base64

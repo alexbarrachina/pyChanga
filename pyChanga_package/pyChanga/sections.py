@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Canonical parser for the editor and command-line runner."""
 from __future__ import annotations
 from dataclasses import dataclass

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Prepare source for playback without starting workers or opening audio.
 
 The CLI and editor share these document rules. The engine receives a complete

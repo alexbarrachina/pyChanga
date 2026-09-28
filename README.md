@@ -280,3 +280,31 @@ FluidSynth is unavailable. The optional soak test runs eight worker processes
 for ten minutes and writes `test-results/soak.json`. Audio-device latency still
 depends on the host system; scheduling accuracy is not a speaker-latency
 guarantee.
+
+## Acknowledgements
+
+pyChanga is deeply inspired by [SCAMP (Suite for Computer-Assisted Music in
+Python)](https://scamp.marcevanstein.com/), created by
+[Marc Evanstein](https://www.marcevanstein.com/). SCAMP's approach to expressing
+music through Python informed pyChanga's musical commands, including `piano()`,
+`wait()`, and `tempo()`, as well as its overall design for musical timing and
+SoundFont playback through FluidSynth. The current pyChanga implementation is
+newly written. We gratefully acknowledge Marc Evanstein and the SCAMP contributors
+for the ideas and work that helped shape this project.
+
+See [SCAMP's source code](https://github.com/MarcTheSpark/scamp) and the
+[third-party notices](THIRD_PARTY_NOTICES.md) for component and historical notices.
+
+## Copyright and license
+
+Copyright © 2026 Alex Barrachina for the original pyChanga and pyChangaIDE
+source code, tests, examples, documentation, and build files in this repository.
+These original contributions are licensed under the
+[GNU General Public License, version 3](LICENSE) (`GPL-3.0-only`). The Python
+package includes its own [copy of the license](pyChanga_package/LICENSE).
+
+This copyright and license apply only to Alex Barrachina's original
+contributions, including the generated `examples/samples/demo.wav`. They do not
+change the rights in third-party libraries, other bundled audio, historical
+course material, or the underlying musical compositions used in examples.
+See [third-party notices](THIRD_PARTY_NOTICES.md) for details.

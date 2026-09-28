@@ -1,3 +1,5 @@
+<!-- Copyright (C) 2026 Alex Barrachina; SPDX-License-Identifier: GPL-3.0-only -->
+
 # Contributor guide
 
 The project has three layers. Work on music belongs in the Python package;

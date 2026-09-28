@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Alex Barrachina
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';

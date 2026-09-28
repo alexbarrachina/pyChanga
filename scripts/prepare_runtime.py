@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Prepare an offline Python + FluidSynth + Pyo runtime.
 
 Downloads have pinned checksums. On macOS, copy and relocate the native

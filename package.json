@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "private": true,
   "description": "A Python live coding studio for musicians",
-  "author": "pyChangaIDE",
+  "author": "Alex Barrachina",
+  "license": "GPL-3.0-only",
   "main": "dist/main.cjs",
   "scripts": {
     "dev": "node scripts/dev.mjs",

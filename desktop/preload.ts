@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Alex Barrachina
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { contextBridge, ipcRenderer } from 'electron';
 import type { EngineEvent, MusicBridge } from '../editor/bridge';
 

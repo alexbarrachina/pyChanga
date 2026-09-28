@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Alex Barrachina
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { _electron as electron, expect } from '@playwright/test';
 import fs from 'node:fs/promises';
 import path from 'node:path';

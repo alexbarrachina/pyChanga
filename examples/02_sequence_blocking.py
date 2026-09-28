@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 from pyChanga import *
 
 # choose 1st and 4rd to play bass notes (0 and 6 every octave)

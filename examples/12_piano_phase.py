@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 from pyChanga import *
 
 pitches = [64, 66, 71, 73, 74, 66, 64, 73, 71, 66, 74, 73]

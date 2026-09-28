@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Portable sample handles and validation. This module never imports Pyo."""
 from __future__ import annotations
 

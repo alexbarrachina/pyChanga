@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """One optional sampler process per engine; workers only exchange small handles.
 
 Loading Pyo or a WAV can be slow. Keeping it here lets the conductor continue

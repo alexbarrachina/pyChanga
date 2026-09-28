@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Native PCM checks; skip when the build machine has no FluidSynth installation."""
 import math
 from pathlib import Path

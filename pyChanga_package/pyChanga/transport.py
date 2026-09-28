@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Piecewise-linear mapping between absolute beats and monotonic seconds."""
 from __future__ import annotations
 import math

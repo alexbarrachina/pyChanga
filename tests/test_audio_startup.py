@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Audio readiness must require samples, not merely an open device handle."""
 from pathlib import Path
 import sys

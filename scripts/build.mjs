@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Alex Barrachina
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { build } from 'esbuild';
 import { build as viteBuild } from 'vite';
 import path from 'node:path';

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The client adapter must preserve the engine's behavior and source errors."""
 from pathlib import Path
 import sys

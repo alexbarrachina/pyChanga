@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Host the playback engine over standard input/output for external clients.
 
 The main thread owns the engine. Reader/writer threads only move messages, so a

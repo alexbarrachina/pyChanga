@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Translate client messages into engine calls.
 
 Only this adapter and service.py know the external protocol version. Playback

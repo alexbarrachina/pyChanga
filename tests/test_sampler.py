@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Sampler contracts and real worker/REPL scheduling, without requiring Pyo."""
 from pathlib import Path
 import base64

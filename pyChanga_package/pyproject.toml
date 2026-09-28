@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
@@ -6,6 +9,8 @@ build-backend = "setuptools.build_meta"
 name = "pyChanga"
 version = "1.0.0"
 description = "A small Python music API with synchronized, independent live parts"
+authors = [{name = "Alex Barrachina"}]
+license = {text = "GPL-3.0-only"}
 requires-python = ">=3.11"
 dependencies = []
 

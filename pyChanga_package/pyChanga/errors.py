@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Source-aware Python errors shared by workers and runtime clients."""
 import traceback
 

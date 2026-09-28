@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Unbounded scale degrees, including negative indices and bounded slices."""
 from dataclasses import dataclass
 from numbers import Integral

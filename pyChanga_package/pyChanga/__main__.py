@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Command-line runner and optional service entry point for pyChanga."""
 from __future__ import annotations
 import argparse

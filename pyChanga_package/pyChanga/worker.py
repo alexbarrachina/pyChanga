@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """One disposable interpreter per part. No audio or clock lives here."""
 from __future__ import annotations
 import io

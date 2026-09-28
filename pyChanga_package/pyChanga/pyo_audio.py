@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Pyo implementation, used only inside the optional sampler process.
 
 Each voice has a file-position ramp, an amplitude envelope and a short safety

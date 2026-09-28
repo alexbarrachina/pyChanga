@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Alex Barrachina
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Real-time worker soak; use --seconds 600 for the release acceptance run."""
 import argparse
 from collections import Counter

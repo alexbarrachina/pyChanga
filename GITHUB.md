@@ -1,3 +1,5 @@
+<!-- Copyright (C) 2026 Alex Barrachina; SPDX-License-Identifier: GPL-3.0-only -->
+
 # Upload pyChangaIDE to GitHub
 
 Keep the editor, `pyChanga_package`, examples, and course together in one repository
