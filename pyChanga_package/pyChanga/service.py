@@ -28,6 +28,7 @@ def _private_stdin():
     from a private copy and leave the null device in its place.
     """
     if sys.platform != "win32":
+        sys.stdin.reconfigure(encoding="utf-8", errors=sys.stdin.errors)
         return sys.stdin
     private = os.dup(sys.stdin.fileno())
     null = os.open(os.devnull, os.O_RDONLY)
@@ -35,7 +36,7 @@ def _private_stdin():
         os.dup2(null, sys.stdin.fileno())
     finally:
         os.close(null)
-    return open(private, encoding=sys.stdin.encoding, errors=sys.stdin.errors, closefd=False)
+    return open(private, encoding="utf-8", errors=sys.stdin.errors, closefd=False)
 
 
 def serve(silent=False):
@@ -46,7 +47,10 @@ def serve(silent=False):
             os.set_inheritable(stream.fileno(), False)
         except (OSError, ValueError):
             pass
+    # The protocol is UTF-8. Python's default on Windows is the system code
+    # page, which corrupted accented file names and text.
     commands = _private_stdin()
+    sys.stdout.reconfigure(encoding="utf-8", errors=sys.stdout.errors)
 
     incoming = queue.Queue(maxsize=128)
     outgoing = queue.Queue(maxsize=512)

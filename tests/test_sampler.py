@@ -260,9 +260,10 @@ class SampleEngineTests(SampleFixture):
         song.write_text('from pyChanga import *\nvoice,length_ms=load_sample("vóice.wav")\n'
                         'sampl(voice,.5,.15,block=False)\nprint("loaded",voice.channels,length_ms)\n',
                         encoding='utf-8')
+        # The path must survive a script whose own streams are not UTF-8, as on Windows.
         result = subprocess.run([sys.executable, str(song)], cwd=ROOT, capture_output=True, text=True,
                                 env={**os.environ, 'PYTHONPATH': str(ROOT / 'pyChanga_package'),
-                                     'PYCHANGA_SILENT': '1'}, timeout=10)
+                                     'PYCHANGA_SILENT': '1', 'PYTHONIOENCODING': 'cp1252'}, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('loaded 1 1000.0', result.stdout)
 

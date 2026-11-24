@@ -16,7 +16,9 @@ ROOT = Path(__file__).resolve().parents[1]
 class ServiceTests(unittest.TestCase):
     def test_private_output_protocol_and_shutdown(self):
         process = subprocess.Popen([sys.executable, '-m', 'pyChanga', '--service', '--silent'],
-            env={**os.environ, 'PYTHONPATH': str(ROOT / 'pyChanga_package')}, stdin=subprocess.PIPE,
+            # The protocol is UTF-8 even where Python's own streams are not, as on Windows.
+            env={**os.environ, 'PYTHONPATH': str(ROOT / 'pyChanga_package'),
+                 'PYTHONIOENCODING': 'cp1252'}, stdin=subprocess.PIPE,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
         messages = queue.Queue()
         def read():
@@ -31,7 +33,7 @@ class ServiceTests(unittest.TestCase):
             ready = messages.get(timeout=5)
             self.assertEqual(ready['type'], 'ready')
             self.assertEqual(ready['version'], 1)
-            source = 'from pyChanga import *\nimport os\nos.write(1, b"not protocol\\n")\nprint("hello")\npiano(60, 0.5, 0.1)\n'
+            source = 'from pyChanga import *\nimport os\nos.write(1, b"not protocol\\n")\nprint("hello música")\npiano(60, 0.5, 0.1)\n'
             process.stdin.write(json.dumps({'version':1,'type':'run','requestId':'one','source':source,'quantization':'immediate'})+'\n')
             process.stdin.flush()
             seen_output = False
@@ -47,7 +49,7 @@ class ServiceTests(unittest.TestCase):
                     self.assertEqual(event['requestId'], 'one')
                     self.assertTrue(event['ok'])
                     seen_response = True
-                if event['type'] == 'output' and 'hello' in event['text']:
+                if event['type'] == 'output' and 'hello música' in event['text']:
                     seen_output = True
                 if event['type'] == 'status' and event['parts'] and event['parts'][0]['state'] == 'finished':
                     break
