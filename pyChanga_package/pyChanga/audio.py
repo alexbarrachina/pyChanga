@@ -24,6 +24,34 @@ class AudioError(RuntimeError):
     pass
 
 
+def _request_audio_timing():
+    """Keep audio refills punctual on Windows; return a function that undoes it.
+
+    FluidSynth's WASAPI driver sleeps between refills. With the default timer
+    (about 16 ms) and ordinary priority it can wake after the device has run
+    out of samples, which is heard as clicks. Workers keep normal priority.
+    """
+    if sys.platform != "win32":
+        return lambda: None
+    normal, above_normal = 0x20, 0x8000
+    winmm, kernel = C.WinDLL("winmm"), C.WinDLL("kernel32")
+    kernel.GetCurrentProcess.restype = C.c_void_p
+    kernel.GetPriorityClass.argtypes = [C.c_void_p]
+    kernel.SetPriorityClass.argtypes = [C.c_void_p, C.c_uint]
+    process = kernel.GetCurrentProcess()
+    precise = winmm.timeBeginPeriod(1) == 0
+    # Leave any priority chosen by the user alone.
+    raised = kernel.GetPriorityClass(process) == normal and kernel.SetPriorityClass(process, above_normal)
+
+    def undo():
+        if precise:
+            winmm.timeEndPeriod(1)
+        if raised:
+            kernel.SetPriorityClass(process, normal)
+
+    return undo
+
+
 class RecordingBackend:
     """No audio device. Records absolute deadlines for scheduler tests."""
     def __init__(self, clock=time.monotonic):
@@ -63,6 +91,7 @@ class FluidSynthBackend:
     """Native audio and sample-driven sequencer; never calls Python on the audio thread."""
     def __init__(self, soundfont=None, library=None, audio_driver=None):
         self.settings = self.synth = self.seq = self.driver = None
+        self.undo_timing = None
         self.sources, self.channels, self.voices = {}, {}, {}
         self.busy = set()
         self.lib = self._load_library(library)
@@ -96,6 +125,7 @@ class FluidSynthBackend:
             self.origin = time.monotonic()
             self.offline = audio_driver == "offline"
             if not self.offline:
+                self.undo_timing = _request_audio_timing()
                 self._start_audio_driver(audio_driver)
         except BaseException:
             self.close()
@@ -275,3 +305,7 @@ class FluidSynthBackend:
             if value:
                 getattr(self, destructor)(value)
                 setattr(self, attribute, None)
+        undo = getattr(self, "undo_timing", None)
+        if undo:
+            undo()
+            self.undo_timing = None
