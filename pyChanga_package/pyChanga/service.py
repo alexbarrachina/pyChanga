@@ -19,6 +19,25 @@ from .engine import Engine, LOOKAHEAD
 from .protocol import PROTOCOL_VERSION, handle_command
 
 
+def _private_stdin():
+    """Return the protocol input, hidden from spawned workers on Windows.
+
+    Windows hands the standard handles to console children even when they are
+    not inheritable. A worker then inspects the stdin pipe during start-up and
+    blocks for as long as our reader thread is waiting on that same pipe. Read
+    from a private copy and leave the null device in its place.
+    """
+    if sys.platform != "win32":
+        return sys.stdin
+    private = os.dup(sys.stdin.fileno())
+    null = os.open(os.devnull, os.O_RDONLY)
+    try:
+        os.dup2(null, sys.stdin.fileno())
+    finally:
+        os.close(null)
+    return open(private, encoding=sys.stdin.encoding, errors=sys.stdin.errors, closefd=False)
+
+
 def serve(silent=False):
     # Spawned Windows workers can inherit standard handles from the service.
     # Keep the protocol and control pipes owned by this process alone.
@@ -27,6 +46,7 @@ def serve(silent=False):
             os.set_inheritable(stream.fileno(), False)
         except (OSError, ValueError):
             pass
+    commands = _private_stdin()
 
     incoming = queue.Queue(maxsize=128)
     outgoing = queue.Queue(maxsize=512)
@@ -54,7 +74,7 @@ def serve(silent=False):
 
     def reader():
         while True:
-            line = sys.stdin.readline(2_000_001)
+            line = commands.readline(2_000_001)
             if not line:
                 disconnected.set()
                 return

@@ -111,7 +111,12 @@ class Output(io.TextIOBase):
         pass
 
 
-def run_worker(connection, payload):
+def run_worker(connection):
+    try:
+        connection.send({"type": "payload"})
+        payload = connection.recv()
+    except (EOFError, OSError):
+        return  # Stopped before its source arrived.
     filename = payload.get("filename", "<worker>")
     runtime = PartRuntime(connection)
     phase = "setup"

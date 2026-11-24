@@ -119,7 +119,7 @@ class ReplTests(unittest.TestCase):
                 raise ValueError("part failed")
 
             run(failing)
-            time.sleep(.5)
+            time.sleep(2)  # Starting a worker can take most of a second on Windows.
             print(name, status()["launchMode"])
             stop(name)
             stop_all()

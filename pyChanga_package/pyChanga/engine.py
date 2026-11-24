@@ -71,6 +71,7 @@ class Revision:
     filename: str
     request_id: str | None
     source: str = ""
+    payload: dict | None = None
     reserved_names: frozenset[str] = frozenset()
     earliest_beat: float | None = None
     group: str | None = None
@@ -189,7 +190,7 @@ class Engine:
         parent, child = self.context.Pipe()
         process = self.context.Process(
             target=run_worker,
-            args=(child, payload),
+            args=(child,),
             name=f"pyChanga: {part.name}",
             daemon=True,
         )
@@ -201,6 +202,7 @@ class Engine:
             filename=payload["filename"],
             request_id=request_id,
             source=payload["source"],
+            payload=payload,
             reserved_names=reserved_names,
             group=group,
             earliest_beat=earliest_beat,
@@ -260,7 +262,13 @@ class Engine:
     def _message(self, part, revision, message):
         kind = message["type"]
         now = self.backend.now()
-        if kind == "ready":
+        if kind == "payload":
+            # Process arguments wait in a small pipe (4 KB on Windows) until the
+            # new interpreter reads them, which would stall the clock. Send the
+            # source and captured functions now that the worker is reading.
+            payload, revision.payload = revision.payload, None
+            revision.connection.send(payload)
+        elif kind == "ready":
             revision.ready = True
             revision.initial_tempo = message.get("tempo")
             if revision.group:
