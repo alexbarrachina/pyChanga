@@ -28,6 +28,7 @@ MAX_NOTES = 1024
 MAX_PARTS = 32
 MAX_REMEMBERED_PARTS = 128
 DIRECT_AHEAD = 2.0  # Seconds of notes a human may queue before backpressure.
+EXIT_GRACE = 0.5  # Seconds to wait for the exit code of a worker that closed its pipe.
 
 
 @dataclass
@@ -87,6 +88,7 @@ class Revision:
     output_bytes: int = 0
     output_warned: bool = False
     late_warned: bool = False
+    pipe_closed: float | None = None
     setup_modes: list[str] = field(default_factory=list)
 
 
@@ -683,14 +685,7 @@ class Engine:
                     self._tick_revision(part, revision)
                 except (EOFError, BrokenPipeError, OSError) as error:
                     if not revision.done:
-                        detail = str(error)
-                        if not detail and not revision.process.is_alive():
-                            detail = f"The Python part exited unexpectedly (exit code {revision.process.exitcode})"
-                        self._fail(part, revision, {
-                            "message": detail or "The Python part exited unexpectedly",
-                            "filename": revision.filename,
-                            "line": part.line,
-                        })
+                        self._worker_lost(part, revision, error)
                 except Exception as error:
                     self._fail(part, revision, error_info(error, revision.filename))
         self._reap()
@@ -737,6 +732,28 @@ class Engine:
             finish_at = self.transport.time_at(revision.start + revision.cursor)
             if finish_at <= now:
                 self._finish_revision(part, revision)
+
+    def _worker_lost(self, part, revision, error):
+        """Report a lost worker by its exit code whenever there is one.
+
+        Windows describes a closed pipe with a localized system error, which
+        tells the user nothing about the part. A worker's pipe also closes
+        slightly before its exit code is available, so look again on later
+        ticks for a short while instead of making the clock wait for it.
+        """
+        exitcode = revision.process.exitcode
+        if exitcode is None and isinstance(error, (EOFError, BrokenPipeError)):
+            now = time.monotonic()
+            if revision.pipe_closed is None:
+                revision.pipe_closed = now
+            if now - revision.pipe_closed < EXIT_GRACE:
+                return
+            detail = "The Python part exited unexpectedly"
+        elif exitcode is None:
+            detail = str(error) or "The Python part exited unexpectedly"
+        else:
+            detail = f"The Python part exited unexpectedly (exit code {exitcode})"
+        self._fail(part, revision, {"message": detail, "filename": revision.filename, "line": part.line})
 
     def _finish_revision(self, part, revision):
         self._terminate(revision, immediate=False)

@@ -61,23 +61,31 @@ class ReplTests(unittest.TestCase):
                   'for setter in (start_on_bar, start_on_beat, start_immediate):\n'
                   '    setter()\n'
                   '    name=run(melody)\n'
-                  '    for _ in range(100):\n'
-                  '        part=next(p for p in status()["parts"] if p["name"]==name)\n'
+                  '    deadline=time.monotonic()+5\n'
+                  '    while time.monotonic()<deadline:\n'
+                  '        now=status()\n'
+                  '        part=next(p for p in now["parts"] if p["name"]==name)\n'
                   '        if part["pending"] and part["pending"]["beat"] is not None: break\n'
                   '        if part["state"]=="finished": break\n'
                   '        time.sleep(.01)\n'
-                  '    print(status()["launchMode"], part["pending"]["beat"] if part["pending"] else "done")\n'
+                  '    print(now["launchMode"], part["pending"]["beat"] if part["pending"] else "done", now["beat"])\n'
                   '    stop(name)\n'
                   'begin=time.monotonic()\n'
                   'for _ in range(30): piano(60,.5,.1)\n'
                   'print("loop",round(time.monotonic()-begin,1),status()["directNotes"])\n'
                   'stop_all()\n')
         result = subprocess.run([sys.executable, "-c", source], env=ENV,
-                                capture_output=True, text=True, timeout=10)
+                                capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("bar 4", result.stdout)
-        self.assertIn("beat 1", result.stdout)
-        self.assertIn("immediate", result.stdout)
+        # Starting a worker can take most of a second, so check each launch
+        # against the clock instead of expecting a particular beat.
+        launches = {line.split()[0]: line.split()[1:] for line in result.stdout.splitlines()}
+        for mode, grid in (("bar", 4), ("beat", 1)):
+            start, now = map(float, launches[mode])
+            self.assertEqual(start % grid, 0, result.stdout)
+            self.assertGreater(start, now, result.stdout)
+            self.assertLess(start - now, grid + .2, result.stdout)
+        self.assertIn("immediate", launches)
         loop = next(line for line in result.stdout.splitlines() if line.startswith("loop "))
         self.assertGreater(float(loop.split()[1]), .5)
         self.assertLessEqual(int(loop.split()[2]), 1024)

@@ -258,7 +258,8 @@ class SampleEngineTests(SampleFixture):
     def test_plain_script_resolves_beside_file_and_drains_samples(self):
         song = self.path.with_suffix('.py')
         song.write_text('from pyChanga import *\nvoice,length_ms=load_sample("vóice.wav")\n'
-                        'sampl(voice,.5,.15,block=False)\nprint("loaded",voice.channels,length_ms)\n')
+                        'sampl(voice,.5,.15,block=False)\nprint("loaded",voice.channels,length_ms)\n',
+                        encoding='utf-8')
         result = subprocess.run([sys.executable, str(song)], cwd=ROOT, capture_output=True, text=True,
                                 env={**os.environ, 'PYTHONPATH': str(ROOT / 'pyChanga_package'),
                                      'PYCHANGA_SILENT': '1'}, timeout=10)

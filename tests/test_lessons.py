@@ -56,7 +56,7 @@ class LessonTests(unittest.TestCase):
         paths = [ROOT / 'examples' / name for name in maintained_examples]
         paths += [ROOT / 'curs' / name for name in course_lessons]
         for path in paths:
-            source = path.read_text()
+            source = path.read_text(encoding='utf-8')
             document = parse_document(source)
             for part in document.parts:
                 with self.subTest(file=path.name, part=part.name):
