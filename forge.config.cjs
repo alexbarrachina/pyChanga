@@ -60,10 +60,7 @@ module.exports = {
   },
   makers: [
     new PyChangaDmgMaker(),
+    // The Windows installer is built afterwards by `npm run make:installer`.
     {name: '@electron-forge/maker-zip', platforms: ['darwin', 'win32']},
-    {name: '@electron-forge/maker-squirrel', platforms: ['win32'], config: {
-      name: 'pyChangaIDE', authors: 'Alex Barrachina', description: 'Python live coding for musicians',
-      ...(signing ? {certificateFile: process.env.WINDOWS_CERTIFICATE_FILE, certificatePassword: process.env.WINDOWS_CERTIFICATE_PASSWORD} : {}),
-    }},
   ],
 };

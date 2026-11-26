@@ -48,9 +48,27 @@ Save a draft or publish when ready. Installers belong in Releases, not in Git
 commits. See [GitHub's release guide](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository).
 
 The included Actions workflow also builds macOS Apple Silicon, macOS Intel, and
-Windows x64 installers. Check each successful run under **Actions** for its
-downloadable artifacts; it does not automatically publish releases. Signing and
-notarization still need your release credentials.
+Windows x64 installers. Check each run under **Actions** for its downloadable
+artifacts. The Windows installer, `pyChangaIDE-<version>-win-x64-setup.exe`, is
+its own `pyChangaIDE-windows-installer` artifact. CI uploads it only after
+installing it, running the app from the installed copy, and uninstalling it.
+
+### Windows release from a tag
+
+Pushing a tag `v<version>` that matches `package.json` makes the workflow attach
+the tested Windows installer and its SHA-256 checksum to a **draft** release for
+that tag:
+
+```sh
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+When the run finishes, open **Releases**, check the draft, add any other
+installers such as the Mac DMG, and publish it. If a release for the tag already
+exists, the installer is added to it instead. Signing and notarization still need
+your release credentials; unsigned Windows installers trigger a SmartScreen
+warning.
 
 ## Upload later changes
 

@@ -46,6 +46,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - if: startsWith(github.ref, 'refs/tags/v')
+        name: Check that the tag matches package.json
+        run: node -e "const v = require('./package.json').version; if (process.env.GITHUB_REF_NAME !== 'v' + v) { console.error('Tag ' + process.env.GITHUB_REF_NAME + ' does not match package.json version ' + v); process.exit(1); }"
       - run: npm ci
       - if: runner.os == 'macOS'
         run: brew install fluidsynth
@@ -56,6 +59,21 @@ jobs:
       - run: node scripts/smoke_desktop.mjs
       - run: python tests/soak.py --seconds 600
       - run: npm run make
+      - if: runner.os == 'Windows'
+        name: Build the Windows installer
+        run: |
+          if ((Test-Path "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe", "$env:ProgramFiles\Inno Setup *\ISCC.exe") -notcontains $true) { choco install innosetup --no-progress -y }
+          npm run make:installer
+      - if: runner.os == 'Windows'
+        name: Install, smoke test and uninstall the Windows installer
+        run: ./scripts/test_windows_installer.ps1
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: pyChangaIDE-windows-installer
+          path: out/installer/*-setup.exe
+          if-no-files-found: error
+          compression-level: 0
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -64,3 +82,38 @@ jobs:
             out/release/make/**
             test-results/**
           if-no-files-found: warn
+
+  release:
+    # A v* tag (matching package.json) attaches the tested Windows installer to
+    # a draft GitHub release. It runs when another platform fails, but needs
+    # the Windows installer artifact.
+    needs: desktop
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pyChangaIDE-windows-installer
+          path: installer
+      - name: Attach the Windows installer to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          cd installer
+          installer=$(ls *-setup.exe)
+          sha256sum "$installer" > "$installer.sha256"
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            gh release create "$TAG" --draft --verify-tag --title "pyChangaIDE ${TAG#v}" --notes-file - <<EOF
+          **Windows x64:** download \`$installer\` and run it. It installs for the
+          current user without administrator rights (the first page also offers an
+          all-users install) and includes Python, so nothing else needs installing.
+
+          The installer is not code-signed, so Windows SmartScreen may say "Windows
+          protected your PC". Choose **More info**, then **Run anyway**.
+          EOF
+          fi
+          gh release upload "$TAG" "$installer" "$installer.sha256" --clobber

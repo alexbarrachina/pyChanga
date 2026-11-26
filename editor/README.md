@@ -97,9 +97,11 @@ executable.
 The packaged runtime lives outside the application archive and includes CPython,
 its standard library, pyChanga, FluidSynth, Pyo and their dependent libraries, the
 soundfont, licenses, and a version/hash manifest. The Mac DMG contains the app
-and an Applications shortcut. Windows builds produce a Squirrel installer and
-a ZIP. Build each target on its own operating system and architecture. Configured
-CI targets are macOS arm64, macOS x64, and Windows x64.
+and an Applications shortcut. Windows builds produce a ZIP, and
+`npm run make:installer` then builds an Inno Setup installer from the packaged
+app (needs Inno Setup 6.3 or newer). Build each target on its own operating
+system and architecture. Configured CI targets are macOS arm64, macOS x64, and
+Windows x64.
 
 Unsigned artifacts are for development. For a signed release, set
 `SIGN_RELEASE=true`. macOS signing requires an installed Developer ID identity

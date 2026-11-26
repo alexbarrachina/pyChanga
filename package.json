@@ -15,6 +15,7 @@
     "test:soak": "python3 tests/soak.py --seconds 600",
     "package": "npm run build && electron-forge package",
     "make": "npm run build && electron-forge make",
+    "make:installer": "node scripts/make_windows_installer.mjs",
     "test:desktop": "node scripts/smoke_desktop.mjs"
   },
   "config": {
@@ -25,7 +26,6 @@
   },
   "devDependencies": {
     "@electron-forge/cli": "7.11.2",
-    "@electron-forge/maker-squirrel": "7.11.2",
     "@electron-forge/maker-zip": "7.11.2",
     "@playwright/test": "1.63.0",
     "@types/node": "22.20.4",
